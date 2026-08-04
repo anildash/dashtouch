@@ -22,6 +22,29 @@ HID+PIV composite firmware, and enclosure/CAD design itself.
 | Enclosure | Custom wood, built by the user | Not designed here. Mounting constraints to carry into that design: ZW101 needs a recess plus a thin non-metal cover over the sensing pad; R503 needs a drilled through-hole sized for its M25 threaded body plus the retaining nut. |
 | Case STL files in repo | Not used | `hardware/case/case_top.stl` / `case_bottom.stl` were sized for the original author's Seeed ESP32-S3 board and are superseded by the custom wood enclosure. |
 
+## Cost (BOM) vs. buying Touch ID
+
+Prices checked live (Adafruit/Amazon/Apple/eBay) as of this spec's date.
+
+| Item | Price | Source |
+| --- | --- | --- |
+| QT Py ESP32-S3 (#5426) | $12.50 | [adafruit.com](https://www.adafruit.com/product/5426) |
+| ZW101 sensor (JMT, Combo A) | $11.58 | [Amazon](https://www.amazon.com/JMT-Fingerprint-Identification-Capacitive-Semiconductor/dp/B0CWTR6MND) |
+| **Core electronics total** | **~$24** | |
+| Apple Magic Keyboard with Touch ID, new (no numpad) | $149.00 | [apple.com](https://www.apple.com/shop/product/mxck3ll/a/) |
+| Apple Magic Keyboard with Touch ID, used (no numpad) | ~$55-65 | live eBay listings; numpad versions run $110-180 used |
+
+The core electronics land around $24, roughly 84% below new retail and
+roughly 60% below the going used price. Enclosure cost (wood, hardware) is
+not counted, since the user is sourcing/building that independently.
+
+Adafruit does not currently stock a round fingerprint sensor (#4651 R503 and
+#4750 Ultra-Slim Round are both out of stock at spec time; their only
+in-stock sensor, #4690, is a $19.95 rectangular optical module that would
+push the total to ~$32 and drop the Touch-ID-round aesthetic). Given the
+cost and shape goals, the ZW101 (sourced via Amazon, not Adafruit) is the
+call for the sensor; the MCU remains Adafruit-sourced.
+
 ## Firmware
 
 Use `firmware/tiny_touch_keyboard/tiny_touch_keyboard.ino` (HID/"red pill"
