@@ -247,11 +247,18 @@ def find_esp_port() -> str:
         serial_number = (port.serial_number or "").replace(":", "").upper()
         if serial_number == PREFERRED_SERIAL:
             return port.device
+    # No exact serial-number match (e.g. this is a different board than the
+    # one PREFERRED_SERIAL was recorded from). Fall back to the sole
+    # connected usbmodem device rather than failing outright.
     ports = sorted(glob.glob("/dev/cu.usbmodem*"))
-    for port in ports:
-        if PREFERRED_SERIAL in port:
-            return port
-    raise SystemExit(f"No ESP32-S3 serial port found for serial {PREFERRED_SERIAL}.")
+    if len(ports) == 1:
+        return ports[0]
+    if not ports:
+        raise SystemExit("No ESP32-S3 serial port found (no /dev/cu.usbmodem* device present).")
+    raise SystemExit(
+        f"Multiple usbmodem ports found and none match serial {PREFERRED_SERIAL}: {ports}. "
+        "Pass --port explicitly."
+    )
 
 
 def self_test() -> None:

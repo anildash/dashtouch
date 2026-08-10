@@ -8,8 +8,8 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/xzm/Projects/tinyTouch/.venv/bin/python</string>
-    <string>/Users/xzm/Projects/tinyTouch/software/macos-helper/tinytouch_helper.py</string>
+    <string>/Users/anildash/Developer/dashtouch/.venv/bin/python</string>
+    <string>/Users/anildash/Developer/dashtouch/software/macos-helper/tinytouch_helper.py</string>
   </array>
 
   <key>RunAtLoad</key>

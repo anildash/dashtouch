@@ -11,9 +11,9 @@ USBCDC USBSerial;
 #endif
 
 static const uint32_t UART_BAUD = 57600;
-static const int FP_TX_PIN = 43;
-static const int FP_RX_PIN = 44;
-static const int FP_INT_PIN = 2;
+static const int FP_TX_PIN = 5;   // QT Py ESP32-S3 header pin labeled "TX"
+static const int FP_RX_PIN = 16;  // QT Py ESP32-S3 header pin labeled "RX"
+static const int FP_INT_PIN = 8;  // QT Py ESP32-S3 header pin labeled "A3"
 static const int INT_ACTIVE_VALUE = 1;
 static const bool USE_INT_PIN = true;
 static const uint16_t START_SLOT = 1;
@@ -186,6 +186,78 @@ static bool fpCommand(uint8_t instruction, const uint8_t *params, size_t paramLe
     delay(5);
   }
   return sawAck;
+}
+
+static bool waitForFingerAbsent(uint32_t timeoutMs) {
+  uint32_t start = millis();
+  while (millis() - start < timeoutMs) {
+    if (!fingerPresent()) return true;
+    delay(25);
+  }
+  return false;
+}
+
+static bool captureAndConvert(uint8_t bufferId, uint32_t timeoutMs) {
+  uint8_t confirm = 0xff;
+  uint32_t start = millis();
+  while (millis() - start < timeoutMs) {
+    if (fpCommand(0x01, nullptr, 0, &confirm, nullptr, nullptr, 500) && confirm == 0x00) break;
+    delay(50);
+  }
+  if (confirm != 0x00) return false;
+  uint8_t img2tz[] = {bufferId};
+  confirm = 0xff;
+  return fpCommand(0x02, img2tz, sizeof(img2tz), &confirm, nullptr, nullptr, 2000) && confirm == 0x00;
+}
+
+static bool enrollFinger(uint16_t slot, uint32_t genImgTimeoutMs) {
+  setAura(FP_LED_WHITE);
+  Serial.println("ENROLL_WAIT_FINGER_1");
+  Serial.flush();
+  if (!captureAndConvert(0x01, genImgTimeoutMs)) {
+    Serial.println("ENROLL_FAIL capture1");
+    return false;
+  }
+
+  setAura(FP_LED_PURPLE);
+  Serial.println("ENROLL_REMOVE_FINGER");
+  Serial.flush();
+  waitForFingerAbsent(5000);
+  delay(300);
+
+  setAura(FP_LED_WHITE);
+  Serial.println("ENROLL_WAIT_FINGER_2");
+  Serial.flush();
+  if (!captureAndConvert(0x02, genImgTimeoutMs)) {
+    Serial.println("ENROLL_FAIL capture2");
+    return false;
+  }
+
+  uint8_t confirm = 0xff;
+  if (!fpCommand(0x05, nullptr, 0, &confirm, nullptr, nullptr, 2000) || confirm != 0x00) {
+    Serial.printf("ENROLL_FAIL regmodel %u\n", confirm);
+    return false;
+  }
+
+  uint8_t storeParams[] = {0x01, (uint8_t)(slot >> 8), (uint8_t)(slot & 0xff)};
+  confirm = 0xff;
+  if (!fpCommand(0x06, storeParams, sizeof(storeParams), &confirm, nullptr, nullptr, 2000) || confirm != 0x00) {
+    Serial.printf("ENROLL_FAIL store %u\n", confirm);
+    return false;
+  }
+
+  Serial.printf("ENROLL_OK %u\n", slot);
+  return true;
+}
+
+static void deleteSlot(uint16_t slot) {
+  uint8_t params[] = {(uint8_t)(slot >> 8), (uint8_t)(slot & 0xff), 0x00, 0x01};
+  uint8_t confirm = 0xff;
+  if (fpCommand(0x0c, params, sizeof(params), &confirm, nullptr, nullptr, 2000) && confirm == 0x00) {
+    Serial.printf("DELETE_OK %u\n", slot);
+  } else {
+    Serial.printf("DELETE_FAIL %u %u\n", slot, confirm);
+  }
 }
 
 static void setAura(uint8_t color) {
@@ -372,6 +444,25 @@ static void handleSerialCommands() {
         const uint8_t test[] = "HID_TEST_OK";
         typeAscii(test, sizeof(test) - 1);
         Serial.println("TYPE_TEST_DONE");
+      } else if (serialCommand.startsWith("ENROLL ")) {
+        String slotToken;
+        parseToken(serialCommand, 1, &slotToken);
+        int slotVal = slotToken.toInt();
+        if (slotVal < START_SLOT || slotVal > END_SLOT) {
+          Serial.println("ENROLL_FAIL bad_slot");
+        } else {
+          enrollFinger((uint16_t)slotVal, 15000);
+        }
+        setAura(FP_LED_PURPLE);
+      } else if (serialCommand.startsWith("DELETE ")) {
+        String slotToken;
+        parseToken(serialCommand, 1, &slotToken);
+        int slotVal = slotToken.toInt();
+        if (slotVal < START_SLOT || slotVal > END_SLOT) {
+          Serial.println("DELETE_FAIL bad_slot");
+        } else {
+          deleteSlot((uint16_t)slotVal);
+        }
       } else if (serialCommand.length()) {
         Serial.print("UNKNOWN_CMD ");
         Serial.println(serialCommand);
