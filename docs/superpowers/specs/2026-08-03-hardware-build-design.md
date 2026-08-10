@@ -17,9 +17,9 @@ HID+PIV composite firmware, and enclosure/CAD design itself.
 | Part | Choice | Why |
 | --- | --- | --- |
 | Microcontroller | [Adafruit QT Py ESP32-S3, 8MB flash / no PSRAM (#5426)](https://www.adafruit.com/product/5426) | Native USB and hardware UART, in stock, small footprint suits a custom wood enclosure. Does **not** expose the same GPIO pins the firmware currently hardcodes (see Firmware section). |
-| Fingerprint sensor (primary) | ZW101 capacitive semiconductor sensor | Same sensing-tech family as Touch ID (capacitive, not optical/lensed). Tiny bare module (~1x1x1cm, 6-pin MX1.0 connector), suited to flush-mounting under a thin non-metal cover. This is the sensor the firmware's UART protocol (`0xEF01` header, 57600 baud) was written against — no protocol code changes needed. In stock on Amazon (JMT ZW101, EC Buying ZW101), ships in ~4-5 days. |
-| Fingerprint sensor (fallback) | R503 capacitive sensor | Same `0xEF01` protocol family, so also a firmware drop-in. Panel-mounts via a threaded M25 metal body and nut rather than sitting flush — fine in a drilled wood recess, but leaves a visible metal ring. Use only if ZW101 sourcing becomes unreliable. In stock on Amazon and other electronics resellers. |
-| Enclosure | Custom wood, built by the user | Not designed here. Mounting constraints to carry into that design: ZW101 needs a recess plus a thin non-metal cover over the sensing pad; R503 needs a drilled through-hole sized for its M25 threaded body plus the retaining nut. |
+| Fingerprint sensor (primary) | ZW101 capacitive semiconductor sensor (spec'd) — actual part received was a **ZW111** | Same sensing-tech family as Touch ID (capacitive, not optical/lensed). Tiny bare module (~1x1x1cm, φ21mm bezel, 1.0mm-pitch 6-pin connector), suited to flush-mounting. This is the sensor family the firmware's UART protocol (`0xEF01` header, 57600 baud) was written against. The ZW111 differs from the ZW101 in pinout — see Firmware section — but shares the same `0xEF01` command protocol family (confirmed compatible with the Adafruit Fingerprint Sensor library, which is hardcoded to that header/checksum format), so no firmware protocol rewrite is expected. **No cable ships with the sensor** — source a separate 1.0mm-pitch 6-pin cable (search "1.0mm pitch 6 pin cable", not "JST-PH", which is a different 2.0mm-pitch series some listings mislabel it as). In stock on Amazon (JMT ZW101, EC Buying ZW101), ships in ~4-5 days — actual part received may vary by listing/batch. |
+| Fingerprint sensor (fallback) | R503 capacitive sensor | Same `0xEF01` protocol family, so also a firmware drop-in. Panel-mounts via a threaded M25 metal body and nut rather than sitting flush — fine in a drilled wood recess, but leaves a visible metal ring. Use only if ZW101/ZW111 sourcing becomes unreliable. In stock on Amazon and other electronics resellers. |
+| Enclosure | Custom wood, built by the user | Not designed here. Mounting constraints to carry into that design: ZW101/ZW111 has a flat bezel (no threaded collar), so it mounts into a stepped recess (Forstner bit or CNC pocket sized to the bezel OD and body height) and is secured with flexible adhesive (E6000, hot glue) or a friction-fit/printed retaining ring — not screwed down. **The sensing pad should stay exposed or be covered only by a thin glass/acrylic window, not a wood veneer** — capacitive sensing is validated against uniform dielectric covers (glass/sapphire, ~0.3-0.5mm) in every commercial implementation; wood's grain inconsistency and moisture sensitivity make it a poor, unvalidated capacitive window, likely to cause unreliable or grain-position-dependent matching. R503 needs a drilled through-hole sized for its M25 threaded body plus the retaining nut. |
 | Case STL files in repo | Not used | `hardware/case/case_top.stl` / `case_bottom.stl` were sized for the original author's Seeed ESP32-S3 board and are superseded by the custom wood enclosure. |
 
 ## Cost (BOM) vs. buying Touch ID
@@ -90,6 +90,51 @@ static const int FP_INT_PIN = 18; // labeled A0
 Apply the same remap to `firmware/tiny_touch_smartcard/main/fingerprint.c`
 if the PIV/PAM firmware is ever revisited later — it hardcodes the identical
 three constants.
+
+### ZW111 pinout (differs from firmware's 3-wire assumption)
+
+The firmware only wires TX/RX/INT. The ZW111's connector exposes 6
+functionally distinct pins. Confirmed against the manufacturer's own
+datasheet (Shenzhen Hi-Link, "ZW111 Semiconductor Fingerprint Processing
+Module Specification" V1.2, §4 — supersedes the earlier Amazon-reviewer pin
+guess, which had VCC and Enable/VCC swapped):
+
+| Pin | Signal | Note | Build cable color |
+| --- | --- | --- | --- |
+| 1 | V_SENSOR | 3.3V, **must stay powered at all times** | Orange |
+| 2 | TOUCH_OUT | wake IRQ (1 = touch true, 0 = false) | Yellow |
+| 3 | VCC | fingerprint module VCC — this is the pin to gate for low-power control | Red/brown |
+| 4 | TX | module → MCU | Green/teal |
+| 5 | RX | MCU → module | Blue |
+| 6 | GND | | Black |
+
+The firmware has no code path for V_SENSOR. Tie pin 1 to a constant 3.3V
+rail; VCC (pin 3) is the one the datasheet's own low-power reference design
+gates via a client MCU I/O pin (R1/R2/Q1/Tr1 level-shift circuit, §5) if
+power-gating is ever wanted — not required for this build. TOUCH_OUT (wake
+IRQ) is unused by the current firmware, which polls via the UART protocol
+instead.
+
+The "Build cable color" column is not vendor-specified — the sourced wiring
+kit is generic crimp-pin stock with no datasheet color code, so this mapping
+is this build's own convention (red/brown=power, black=ground, yellow=signal,
+per common practice). What matters is consistency at both ends of the cable
+and physically labeling pin 1 vs. pin 6 on the connector housing, since the
+sensor's connector is keyed/directional and colors alone won't self-document
+the pinout to someone reading the finished build later.
+
+**Protocol confirmed, not just likely-compatible:** Hi-Link's companion
+document, "Fingerprint module product user communication protocol" V1.1,
+is the vendor's own protocol spec (not Adafruit-library-inferred) and
+describes the exact framing this firmware hand-rolls in `scanMatch()`:
+`0xEF01` 2-byte header, 4-byte device address defaulting to `0xFFFFFFFF`,
+1-byte package ID (01=command, 02=data, 08=end-data), 57600 baud default
+(settable 9600-115200), and the same confirmation-code table (`00H`=OK,
+`08H`=mismatch, `09H`=not found, etc.). This lines up with the firmware's
+protocol assumptions closely enough that command-level compatibility is
+expected, not just likely — but still confirm with a real enroll/match cycle
+before spending more time on the enclosure, since minor command-set gaps
+between sensor SKUs are still possible.
 
 ### Known discrepancies in the upstream repo
 
