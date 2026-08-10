@@ -84,8 +84,13 @@ Py's labeled pins:
 ```c
 static const int FP_TX_PIN = 5;   // labeled TX
 static const int FP_RX_PIN = 16;  // labeled RX
-static const int FP_INT_PIN = 18; // labeled A0
+static const int FP_INT_PIN = 8;  // labeled A3
 ```
+
+(An earlier draft of this spec used A0/GPIO18 for the interrupt pin. The
+committed firmware and the physical build both use A3/GPIO8 instead — either
+free pin works electrically, but A3 is what's actually soldered and what
+`tiny_touch_keyboard.ino` now hardcodes, so treat A3 as authoritative.)
 
 Apply the same remap to `firmware/tiny_touch_smartcard/main/fingerprint.c`
 if the PIV/PAM firmware is ever revisited later — it hardcodes the identical
@@ -99,29 +104,35 @@ datasheet (Shenzhen Hi-Link, "ZW111 Semiconductor Fingerprint Processing
 Module Specification" V1.2, §4 — supersedes the earlier Amazon-reviewer pin
 guess, which had VCC and Enable/VCC swapped):
 
-| Pin | Signal | Note | Build cable color |
-| --- | --- | --- | --- |
-| 1 | V_SENSOR | 3.3V, **must stay powered at all times** | Orange |
-| 2 | TOUCH_OUT | wake IRQ (1 = touch true, 0 = false) | Yellow |
-| 3 | VCC | fingerprint module VCC — this is the pin to gate for low-power control | Red/brown |
-| 4 | TX | module → MCU | Green/teal |
-| 5 | RX | MCU → module | Blue |
-| 6 | GND | | Black |
+| Pin | Signal | Note | QT Py pin | Wire color |
+| --- | --- | --- | --- | --- |
+| 1 | V_SENSOR | 3.3V, **must stay powered at all times** | `3V` | Red |
+| 2 | TOUCH_OUT | wake IRQ (1 = touch true, 0 = false) | `A3` (GPIO 8) | White |
+| 3 | VCC | fingerprint module VCC — this is the pin to gate for low-power control | `3V` (separate wire from pin 1, same header pin) | Red |
+| 4 | TX | module → MCU | `RX` (GPIO 16) | White |
+| 5 | RX | MCU → module | `TX` (GPIO 5) | Green |
+| 6 | GND | | `GND` | Black |
 
 The firmware has no code path for V_SENSOR. Tie pin 1 to a constant 3.3V
 rail; VCC (pin 3) is the one the datasheet's own low-power reference design
 gates via a client MCU I/O pin (R1/R2/Q1/Tr1 level-shift circuit, §5) if
 power-gating is ever wanted — not required for this build. TOUCH_OUT (wake
-IRQ) is unused by the current firmware, which polls via the UART protocol
-instead.
+IRQ) connects to A3 since that's the interrupt pin `tiny_touch_keyboard.ino`
+now hardcodes (`FP_INT_PIN = 8`) and polls via `fingerPresent()`.
 
-The "Build cable color" column is not vendor-specified — the sourced wiring
-kit is generic crimp-pin stock with no datasheet color code, so this mapping
-is this build's own convention (red/brown=power, black=ground, yellow=signal,
-per common practice). What matters is consistency at both ends of the cable
-and physically labeling pin 1 vs. pin 6 on the connector housing, since the
-sensor's connector is keyed/directional and colors alone won't self-document
-the pinout to someone reading the finished build later.
+The "Wire color" column is not vendor-specified — the sourced wiring kit is
+generic crimp-pin stock with no datasheet color code. This build's
+convention is to color each sensor-side wire to match the color of the QT
+Py header pin it lands on (already soldered per the header's own scheme:
+black=ground/spare, red=power, blue=SDA, yellow=SCL, green=TX, white=RX/INT),
+so the whole electrical path reads as one consistent color end to end
+rather than inventing a second, disconnected color code for the sensor
+harness. Two wires land on the QT Py's single `3V` pin (V_SENSOR and VCC) —
+that's intentional, not a wiring error to consolidate down to one wire.
+Regardless of color choice, physically label pin 1 vs. pin 6 on the
+connector housing, since the sensor's connector is keyed/directional and
+colors alone won't self-document the pinout to someone reading the finished
+build later.
 
 **Protocol confirmed, not just likely-compatible:** Hi-Link's companion
 document, "Fingerprint module product user communication protocol" V1.1,

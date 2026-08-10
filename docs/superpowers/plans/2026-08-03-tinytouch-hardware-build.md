@@ -2,19 +2,17 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Get a QT Py ESP32-S3 + ZW101 fingerprint sensor running tinyTouch's
+**Goal:** Get a QT Py ESP32-S3 + ZW111 fingerprint sensor running tinyTouch's
 HID ("red pill") firmware end-to-end on a breadboard — fingerprint touch
 types the real macOS password — before any enclosure work begins.
 
 **Architecture:** Existing `tiny_touch_keyboard.ino` firmware talks to the
 fingerprint sensor over UART using the `0xEF01` packet protocol and to macOS
 over USB HID (as a keyboard) plus USB CDC (serial link to a Python helper
-daemon that holds the real password in Keychain). The only code change
-needed is remapping three GPIO pin constants, since the QT Py ESP32-S3
-doesn't expose the pins the firmware currently hardcodes. Fingerprint
-templates live on the sensor's own flash, not the ESP32 — enrollment must
-happen via a separate one-off sketch before the tinyTouch firmware can match
-anything, since tinyTouch's own firmware has no enroll routine.
+daemon that holds the real password in Keychain). Fingerprint templates
+live on the sensor's own flash, not the ESP32; enrollment is done via
+`ENROLL`/`DELETE` serial commands built into the same firmware (see Task 4)
+rather than a separate sketch.
 
 **Tech Stack:** Arduino IDE (ESP32 board package), C/C++ (`.ino`), Python 3
 (macOS helper), macOS Keychain.
@@ -24,7 +22,7 @@ anything, since tinyTouch's own firmware has no enroll routine.
 - Board: Adafruit QT Py ESP32-S3, 8MB flash / no PSRAM (#5426).
 - Arduino IDE board settings: `USB CDC on Boot: Enabled`, `USB Mode: USB-OTG`
   (from `firmware/tiny_touch_keyboard/README.md`).
-- Fingerprint sensor: ZW101, UART at 57600 baud, `0xEF01` packet header.
+- Fingerprint sensor: ZW111, UART at 57600 baud, `0xEF01` packet header.
 - Never commit `firmware/tiny_touch_keyboard/secrets.h` (already covered by
   the repo's existing guidance; verify `.gitignore` before creating it).
 - Do not enable secure boot / flash encryption during this plan — those are
@@ -34,7 +32,8 @@ anything, since tinyTouch's own firmware has no enroll routine.
 ## Prerequisites
 
 Before starting Task 1, have in hand: an Adafruit QT Py ESP32-S3 (#5426), a
-ZW101 fingerprint sensor with its 6-pin cable, and a USB-C cable. These are
+ZW111 fingerprint sensor with a 6-pin, 1.0mm-pitch cable (none ships with
+the sensor — source separately), and a USB-C cable. These are
 purchasing steps (see the design spec's Cost/BOM section for sourcing
 links), not engineering tasks, so they aren't broken out below.
 
@@ -55,7 +54,7 @@ links), not engineering tasks, so they aren't broken out below.
 - [ ] **Step 1: Create the venv and install dependencies**
 
 ```bash
-cd /Users/anildash/Developer/tinyTouch
+cd /Users/anildash/Developer/dashtouch
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r software/macos-helper/requirements.txt
@@ -144,8 +143,13 @@ to:
 ```cpp
 static const int FP_TX_PIN = 5;   // QT Py ESP32-S3 pin labeled TX
 static const int FP_RX_PIN = 16;  // QT Py ESP32-S3 pin labeled RX
-static const int FP_INT_PIN = 18; // QT Py ESP32-S3 pin labeled A0
+static const int FP_INT_PIN = 8;  // QT Py ESP32-S3 pin labeled A3
 ```
+
+(This step is done — already committed as `2d16fe0`, using A3/GPIO8 rather
+than the A0/GPIO18 an earlier draft of this plan specified. Both are valid
+free pins; A3 is what's actually soldered and hardcoded now, so it's
+authoritative. Steps 3-4 below are kept for reference.)
 
 - [ ] **Step 3: Verify the edit**
 
@@ -155,24 +159,15 @@ grep -n "FP_TX_PIN\|FP_RX_PIN\|FP_INT_PIN" firmware/tiny_touch_keyboard/tiny_tou
 
 Expected output includes:
 ```
-14:static const int FP_TX_PIN = 5;   // QT Py ESP32-S3 pin labeled TX
-15:static const int FP_RX_PIN = 16;  // QT Py ESP32-S3 pin labeled RX
-16:static const int FP_INT_PIN = 18; // QT Py ESP32-S3 pin labeled A0
+14:static const int FP_TX_PIN = 5;   // QT Py ESP32-S3 header pin labeled "TX"
+15:static const int FP_RX_PIN = 16;  // QT Py ESP32-S3 header pin labeled "RX"
+16:static const int FP_INT_PIN = 8;  // QT Py ESP32-S3 header pin labeled "A3"
 ```
 
 - [ ] **Step 4: Commit**
 
-```bash
-git add firmware/tiny_touch_keyboard/tiny_touch_keyboard.ino
-git commit -m "$(cat <<'EOF'
-Remap fingerprint sensor pins for QT Py ESP32-S3
-
-GPIO 43/44/2 aren't broken out on this board; use the pins labeled
-TX/RX/A0 instead (GPIO 5/16/18), routed via the ESP32-S3's UART
-GPIO matrix.
-EOF
-)"
-```
+Already done in `2d16fe0` ("Fix QT Py ESP32-S3 pin mapping and add
+fingerprint enrollment").
 
 ---
 
@@ -182,19 +177,28 @@ EOF
 
 **Interfaces:**
 - Consumes: pin assignments from Task 2 (`FP_TX_PIN=5`, `FP_RX_PIN=16`,
-  `FP_INT_PIN=18`).
+  `FP_INT_PIN=8`).
 
 - [ ] **Step 1: Wire on a breadboard (power off)**
 
-Connect, with the QT Py ESP32-S3 unpowered:
-- ZW101 VCC → QT Py `3V` pin
-- ZW101 GND → QT Py `GND` pin
-- ZW101 TX → QT Py pin labeled `RX` (GPIO 16)
-- ZW101 RX → QT Py pin labeled `TX` (GPIO 5)
-- ZW101 interrupt/touch-out pin → QT Py pin labeled `A0` (GPIO 18)
+The actual sensor received is a **ZW111**, not the ZW101 this plan was
+originally written against (see the design spec's "ZW111 pinout" section).
+The ZW111 exposes 6 pins, not the 5 this step originally listed — it has a
+separate always-on `V_SENSOR` pin distinct from `VCC`, both of which land on
+the QT Py's `3V` pin as two separate wires.
+
+Connect, with the QT Py ESP32-S3 unpowered (color = this build's convention,
+matching the already-soldered header pin colors):
+- ZW111 pin 1 (V_SENSOR) → QT Py `3V` pin — Red
+- ZW111 pin 3 (VCC) → QT Py `3V` pin, second wire — Red
+- ZW111 pin 6 (GND) → QT Py `GND` pin — Black
+- ZW111 pin 4 (TX) → QT Py pin labeled `RX` (GPIO 16) — White
+- ZW111 pin 5 (RX) → QT Py pin labeled `TX` (GPIO 5) — Green
+- ZW111 pin 2 (TOUCH_OUT) → QT Py pin labeled `A3` (GPIO 8) — White
 
 (Sensor TX goes to board RX and vice versa — this is a standard UART
-crossover, not a mistake to double check away.)
+crossover, not a mistake to double check away. Two wires converging on the
+single `3V` pin is intentional, not a wiring error.)
 
 - [ ] **Step 2: Install the ESP32 board package and select the board**
 
@@ -246,118 +250,58 @@ PONG
 
 ### Task 4: Enroll a fingerprint
 
-tinyTouch's own firmware has no enrollment routine — it only matches against
-slots 1-5 (`START_SLOT`/`END_SLOT` in the `.ino`). Templates live in the
-sensor's own flash, so enrollment is a one-time step done with a separate,
-temporary sketch using the standard `Adafruit_Fingerprint` library, which
-speaks the same `0xEF01` protocol.
+tinyTouch's own firmware originally had no enrollment routine — it only
+matched against slots 1-5 (`START_SLOT`/`END_SLOT` in the `.ino`). Rather
+than swap in a temporary separate sketch (this task's original approach),
+`ENROLL <slot>` / `DELETE <slot>` serial commands were added directly to
+`tiny_touch_keyboard.ino` (commit `2d16fe0`), implementing the standard
+AS608/ZW101/ZW111 GenImg → Img2Tz → RegModel → Store sequence. This means
+enrollment now works with the *same* firmware you flash for normal use — no
+reflashing between enrolling and running.
 
 **Files:**
-- Create (temporary, not committed): a scratch Arduino sketch, e.g.
-  `/tmp/tinytouch_enroll/tinytouch_enroll.ino`.
+- Already created: `software/macos-helper/tinytouch_enroll.py` drives the
+  `ENROLL`/`DELETE` commands interactively over serial.
 
 **Interfaces:**
-- Produces: a fingerprint template stored in the ZW101's onboard flash at
-  ID 1, which `tiny_touch_keyboard.ino`'s `scanMatch()` (searching slots
-  1-5) will match against in Task 5.
+- Produces: a fingerprint template stored in the sensor's onboard flash at
+  the chosen slot (1-5), which `tiny_touch_keyboard.ino`'s `scanMatch()`
+  will match against in Task 5.
 
-- [ ] **Step 1: Install the Adafruit Fingerprint Sensor Library**
+- [ ] **Step 1: Make sure nothing else has the serial port open**
 
-In Arduino IDE: Sketch > Include Library > Manage Libraries, search
-"Adafruit Fingerprint Sensor Library", install it.
+Close Arduino IDE's Serial Monitor (or any other process using the port) —
+`tinytouch_enroll.py` needs exclusive access, same as `tinytouch_helper.py`
+does later.
 
-- [ ] **Step 2: Disconnect the QT Py from Arduino IDE / close Serial Monitor**
+- [ ] **Step 2: Run the enroll script**
 
-Close the Serial Monitor from Task 3 so it doesn't hold the port.
-
-- [ ] **Step 3: Create the enrollment sketch**
-
-Create `/tmp/tinytouch_enroll/tinytouch_enroll.ino`:
-
-```cpp
-#include <Adafruit_Fingerprint.h>
-
-HardwareSerial fingerSerial(1);
-Adafruit_Fingerprint finger(&fingerSerial);
-
-uint8_t getFingerprintEnroll(uint8_t id) {
-  int p = -1;
-  Serial.println("Place finger on sensor...");
-  while (p != FINGERPRINT_OK) {
-    p = finger.getImage();
-    switch (p) {
-      case FINGERPRINT_OK: Serial.println("Image taken"); break;
-      case FINGERPRINT_NOFINGER: Serial.print("."); break;
-      default: Serial.println("Error taking image"); return p;
-    }
-  }
-  p = finger.image2Tz(1);
-  if (p != FINGERPRINT_OK) { Serial.println("Error converting image 1"); return p; }
-
-  Serial.println("Remove finger");
-  delay(2000);
-  p = 0;
-  while (p != FINGERPRINT_NOFINGER) p = finger.getImage();
-
-  p = -1;
-  Serial.println("Place same finger again...");
-  while (p != FINGERPRINT_OK) {
-    p = finger.getImage();
-    switch (p) {
-      case FINGERPRINT_OK: Serial.println("Image taken"); break;
-      case FINGERPRINT_NOFINGER: Serial.print("."); break;
-      default: Serial.println("Error taking image"); return p;
-    }
-  }
-  p = finger.image2Tz(2);
-  if (p != FINGERPRINT_OK) { Serial.println("Error converting image 2"); return p; }
-
-  p = finger.createModel();
-  if (p != FINGERPRINT_OK) { Serial.println("Prints did not match"); return p; }
-
-  p = finger.storeModel(id);
-  if (p == FINGERPRINT_OK) {
-    Serial.println("Stored!");
-  } else {
-    Serial.println("Error storing model");
-  }
-  return p;
-}
-
-void setup() {
-  Serial.begin(115200);
-  delay(1500);
-  fingerSerial.begin(57600, SERIAL_8N1, 16, 5); // RX=16, TX=5 (matches Task 2 wiring)
-  if (finger.verifyPassword()) {
-    Serial.println("Sensor found");
-  } else {
-    Serial.println("Sensor NOT found - check wiring");
-    while (1) delay(1000);
-  }
-}
-
-void loop() {
-  getFingerprintEnroll(1); // store into slot 1, within tinyTouch's 1-5 search range
-  Serial.println("Enroll finished. Reset the board to enroll another finger, or upload a different sketch.");
-  while (1) delay(1000);
-}
+```bash
+cd /Users/anildash/Developer/dashtouch
+. .venv/bin/activate
+.venv/bin/python software/macos-helper/tinytouch_enroll.py --port /dev/cu.usbmodemXXXX --slot 1
 ```
 
-- [ ] **Step 4: Flash and run enrollment**
+(Substitute the actual port; `arduino-cli board list` or Task 3's Serial
+Monitor session shows it.)
 
-Upload the sketch (same board/USB settings as Task 3), open Serial Monitor
-at 115200 baud. Follow the printed prompts: place finger, remove, place
-same finger again.
+Follow the printed prompts: place finger, lift it off, place the same
+finger again.
 
 Expected final output:
 ```
-Stored!
-Enroll finished. Reset the board to enroll another finger, or upload a different sketch.
+esp: ENROLL_OK 1
+enrolled slot 1 successfully
 ```
 
-If you see `Sensor NOT found - check wiring`, recheck the wiring from
-Task 3 — the pin assignments in this sketch (`fingerSerial.begin(57600,
-SERIAL_8N1, 16, 5)`) intentionally match Task 2's remap.
+- [ ] **Step 3: If it fails**
+
+`esp: ENROLL_FAIL capture1` / `capture2` means the sensor didn't get a clean
+read in time — retry, make sure the finger fully covers the sensing pad.
+`esp: ENROLL_FAIL regmodel` means the two captures didn't match closely
+enough — retry with more consistent finger placement. `no response to
+ENROLL command` means the board isn't running this firmware, or the wiring
+from Task 3 is off — recheck TX/RX aren't swapped.
 
 ---
 
@@ -410,7 +354,7 @@ READY
 In a terminal:
 
 ```bash
-cd /Users/anildash/Developer/tinyTouch
+cd /Users/anildash/Developer/dashtouch
 . .venv/bin/activate
 .venv/bin/python software/macos-helper/tinytouch_helper.py
 ```
@@ -451,7 +395,7 @@ cp software/macos-helper/launchd/com.tinytouch.helper.plist ~/Library/LaunchAgen
 ```
 
 Edit `~/Library/LaunchAgents/com.tinytouch.helper.plist` so any path
-references point at `/Users/anildash/Developer/tinyTouch` and your `.venv`
+references point at `/Users/anildash/Developer/dashtouch` and your `.venv`
 python binary, then:
 
 ```bash
