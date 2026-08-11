@@ -23,6 +23,7 @@ static const uint32_t HELPER_TIMEOUT_MS = 6000;
 static const bool TYPE_RETURN_AFTER_PASSWORD = true;
 static const bool ENABLE_TEST_COMMANDS = false;
 static const bool DEBUG_FP_PACKETS = false;
+static const bool DEBUG_FP_RAW_ON_FAIL = true;
 
 static const uint8_t FP_LED_GREEN = 0x02;
 static const uint8_t FP_LED_WHITE = 0x07;
@@ -111,6 +112,9 @@ static bool fpCommand(uint8_t instruction, const uint8_t *params, size_t paramLe
   uint32_t postAckUntil = 0;
   if (data && dataLen) *dataLen = 0;
 
+  uint8_t rawSeen[64];
+  size_t rawSeenLen = 0;
+
   uint8_t payload[32];
   if (paramLen + 1 > sizeof(payload)) return false;
   payload[0] = instruction;
@@ -132,6 +136,7 @@ static bool fpCommand(uint8_t instruction, const uint8_t *params, size_t paramLe
   while (millis() - start < timeoutMs) {
     while (Finger.available() && pos < sizeof(response)) {
       response[pos++] = (uint8_t)Finger.read();
+      if (rawSeenLen < sizeof(rawSeen)) rawSeen[rawSeenLen++] = response[pos - 1];
       while (pos >= 2 && !(response[0] == 0xef && response[1] == 0x01)) {
         memmove(response, response + 1, --pos);
       }
@@ -184,6 +189,12 @@ static bool fpCommand(uint8_t instruction, const uint8_t *params, size_t paramLe
     }
     if (sawAck && postAckUntil && millis() > postAckUntil) return true;
     delay(5);
+  }
+  if (!sawAck && DEBUG_FP_RAW_ON_FAIL) {
+    Serial.printf("FP_RAW instr=%02x bytes_seen=%u data=%s\n", instruction,
+                  (unsigned)rawSeenLen,
+                  rawSeenLen ? toHex(rawSeen, rawSeenLen).c_str() : "-");
+    Serial.flush();
   }
   return sawAck;
 }
@@ -264,7 +275,7 @@ static void setAura(uint8_t color) {
   if (color == currentLed) return;
   uint8_t params[] = {FP_LED_FUNC_STEADY, color, color, 0};
   uint8_t confirm = 0xff;
-  fpCommand(0x3c, params, sizeof(params), &confirm, nullptr, nullptr, 1000);
+  fpCommand(0x35, params, sizeof(params), &confirm, nullptr, nullptr, 1000);
   currentLed = color;
 }
 
