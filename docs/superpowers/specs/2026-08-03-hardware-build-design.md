@@ -17,9 +17,9 @@ HID+PIV composite firmware, and enclosure/CAD design itself.
 | Part | Choice | Why |
 | --- | --- | --- |
 | Microcontroller | [Adafruit QT Py ESP32-S3, 8MB flash / no PSRAM (#5426)](https://www.adafruit.com/product/5426) | Native USB and hardware UART, in stock, small footprint suits a custom wood enclosure. Does **not** expose the same GPIO pins the firmware currently hardcodes (see Firmware section). |
-| Fingerprint sensor (in use) | **R503** capacitive sensor (GROW, Hangzhou Grow Technology) | Switched to after the originally-sourced ZW111 unit (see below) was diagnosed as defective/DOA. Same `0xEF01` command protocol family as the ZW101/ZW111 (confirmed against the vendor's own R503 user manual, not just inferred) — same header, same 4-byte default address `0xFFFFFFFF`, same checksum formula, same MX1.0-6P connector type, so no firmware protocol changes needed, only the pin-order documentation below. Panel-mounts via a threaded M25 metal body and nut (28mm OD, 23.5mm ID, 19mm height) rather than sitting flush. In stock on Amazon and other electronics resellers, ships with its own 6-pin cable attached. |
+| Fingerprint sensor (in use) | **R503-compatible module**, brand "Simlug" ([Amazon, ASIN B08HM8QDVW](https://www.amazon.com/dp/B08HM8QDVW), ~$29.91) | Switched to after the originally-sourced ZW111 unit (see below) was diagnosed as defective/DOA. Same `0xEF01` command protocol family as the ZW101/ZW111 and identical pin table/connector to the genuine GROW R503 (confirmed from this listing's own product images: `Connector: MX1.0-6P`, pins 1-6 = Power Supply/GND/TXD/RXD/WAKEUP/3.3VT, exactly matching the GROW R503 manual) — so the R503 pinout table below applies as-is, no firmware changes needed. Ships with its own attached 6-pin cable, no separate cable sourcing needed (unlike the ZW111). |
 | Fingerprint sensor (superseded) | ZW101 capacitive semiconductor sensor (spec'd) — actual part received was a **ZW111** | Originally chosen for its flush, bezel-less mounting. After extensive hardware debugging (see "ZW111 unit found defective" below), this specific unit never produced a valid protocol response under any wiring, baud rate, or connector tested, despite the firmware's protocol implementation being verified byte-for-byte correct against two independent reference implementations (Adafruit's Fingerprint Sensor Library and a ZW111-specific driver). Kept here for reference since the pin/wiring information may be useful if a replacement ZW111 is tried later. **No cable ships with the sensor** — source a separate 1.0mm-pitch 6-pin cable (search "1.0mm pitch 6 pin cable", not "JST-PH", which is a different 2.0mm-pitch series some listings mislabel it as). |
-| Enclosure | Custom wood, built by the user | Not designed here. Mounting constraint for the R503 (now in use): it has a threaded M25 metal body, so it needs a **drilled through-hole** sized for the threaded body plus a retaining nut on the back side — not a stepped recess. This produces a visible metal bezel around the sensing pad, similar in spirit to Touch ID's own metal ring, rather than a flush hidden mount. **The sensing pad should stay exposed or be covered only by a thin glass/acrylic window, not a wood veneer** — capacitive sensing is validated against uniform dielectric covers (glass/sapphire, ~0.3-0.5mm) in every commercial implementation; wood's grain inconsistency and moisture sensitivity make it a poor, unvalidated capacitive window, likely to cause unreliable or grain-position-dependent matching. (If a ZW101/ZW111 is used instead: flat bezel, no threaded collar, mounts into a stepped recess sized to the bezel OD and body height, secured with flexible adhesive or a friction-fit/printed retaining ring.) |
+| Enclosure | Custom wood, built by the user | Not designed here. Mounting constraint for the R503-compatible module (now in use): it has a threaded metal body, so it needs a **drilled through-hole** sized for the threaded body plus a retaining nut on the back side — not a stepped recess. This produces a visible metal bezel around the sensing pad, similar in spirit to Touch ID's own metal ring, rather than a flush hidden mount. **Dimensions, from this exact listing's own product photos** (not the genuine GROW R503 datasheet — see discrepancy note below): front bezel/face diameter **27.8mm (1.1")**, body height **19mm (0.7")**, threaded shank diameter **16.5mm (0.6")** — drill the through-hole to the shank diameter (16.5mm plus a small clearance fit, confirm against the actual part with calipers before committing, since these figures are read off a marketing photo, not a certified drawing) and countersink/recess the front face by roughly the bezel-to-shank height difference if a flush-ish front is wanted. **The sensing pad should stay exposed or be covered only by a thin glass/acrylic window, not a wood veneer** — capacitive sensing is validated against uniform dielectric covers (glass/sapphire, ~0.3-0.5mm) in every commercial implementation; wood's grain inconsistency and moisture sensitivity make it a poor, unvalidated capacitive window, likely to cause unreliable or grain-position-dependent matching. (If a ZW101/ZW111 is used instead: flat bezel, no threaded collar, mounts into a stepped recess sized to the bezel OD and body height, secured with flexible adhesive or a friction-fit/printed retaining ring.) |
 | Case STL files in repo | Not used | `hardware/case/case_top.stl` / `case_bottom.stl` were sized for the original author's Seeed ESP32-S3 board and are superseded by the custom wood enclosure. |
 
 ## Cost (BOM) vs. buying Touch ID
@@ -150,26 +150,35 @@ between sensor SKUs are still possible.
 
 ### R503 pinout (sensor currently in use)
 
-Confirmed against the vendor's own manual (Hangzhou Grow Technology, "R503
-Fingerprint Module User Manual" Ver 1.1). Connector is MX1.0-6P — same family
-as the ZW111's, but **pin order is different, do not reuse the ZW111 table
-above**:
+Confirmed two ways: against the genuine vendor's manual (Hangzhou Grow
+Technology, "R503 Fingerprint Module User Manual" Ver 1.1), and
+independently against the actual ordered listing's own product images
+(Amazon ASIN B08HM8QDVW, brand "Simlug") — both show an identical pin table,
+so this module is a compatible clone, not a different pinout. Connector is
+MX1.0-6P — same family as the ZW111's, but **pin order is different, do not
+reuse the ZW111 table above**:
 
 | Pin | Signal | Note | QT Py pin | Wire color |
 | --- | --- | --- | --- | --- |
 | 1 | Power Supply | DC 3.3V | `3V` | Red |
-| 2 | GND | Signal ground, connected to power ground | `GND` | Black |
-| 3 | TXD | Data output (module → MCU) | `RX` (GPIO 16) | White |
-| 4 | RXD | Data input (MCU → module) | `TX` (GPIO 5) | Green |
+| 2 | GND | Power supply and signal ground | `GND` | Black |
+| 3 | TXD | Data output (module → MCU), TTL logic level | `RX` (GPIO 16) | White |
+| 4 | RXD | Data input (MCU → module), TTL logic level | `TX` (GPIO 5) | Green |
 | 5 | WAKEUP | Finger detection signal | `A3` (GPIO 8) | White |
 | 6 | 3.3VT | Touch induction power supply, DC 3-6V, **must stay powered at all times** (same role as the ZW111's `V_SENSOR`) | `3V` (second wire, same header pin as pin 1) | Red |
 
-Same wiring conventions as the ZW111 build: TX/RX cross over (sensor's TXD
-goes to the QT Py's `RX`, not `TX`), two wires converge on the QT Py's
-single `3V` pin (main power + always-on touch power), and wire colors match
-the QT Py header pin each wire lands on rather than a separate vendor code
-(none is specified — this connector ships as a bare crimped cable with no
-documented color standard).
+Unlike the ZW111 build, **this sensor ships with its own factory-crimped
+6-wire cable already attached** — there's no hand-wiring or color scheme to
+choose here. Identify wires by **pin position**, not by re-deriving colors:
+the connector housing itself is printed with "1" and "6" at either end (per
+the ordered listing's own photo), so match the physical wire order at the
+connector to the pin table above, then wire each into the matching QT Py
+pin per the table (still crossing TX/RX, still landing two wires on the
+single `3V` pin). Confirm the actual factory wire colors once the part is
+in hand and update this table with what's actually observed, rather than
+assuming the ZW111 build's colors carry over — they don't, since that
+scheme was this build's own invention for a hand-built harness, not
+anything vendor-specified.
 
 Protocol confirmed directly from the vendor manual, not inferred: `0xEF01`
 2-byte header (high byte first), 4-byte address defaulting to `0xFFFFFFFF`,
