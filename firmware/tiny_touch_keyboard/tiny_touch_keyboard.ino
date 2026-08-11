@@ -25,12 +25,20 @@ static const bool ENABLE_TEST_COMMANDS = false;
 static const bool DEBUG_FP_PACKETS = false;
 static const bool DEBUG_FP_RAW_ON_FAIL = true;
 
-static const uint8_t FP_LED_GREEN = 0x02;
+// Aura LED colors, per the R503/R5xx AuraLedConfig (0x35) spec:
+// 1=red 2=blue 3=purple 4=green 5=yellow 6=cyan 7=white.
+// (An earlier revision had green=0x02 and red=0x04, which on an R503 actually
+// render as blue and green respectively.)
+static const uint8_t FP_LED_RED = 0x01;
+static const uint8_t FP_LED_BLUE = 0x02;
+static const uint8_t FP_LED_GREEN = 0x04;
 static const uint8_t FP_LED_WHITE = 0x07;
-static const uint8_t FP_LED_RED = 0x04;
 // This unit showed visible purple at 0x03 in previous ESP testing.
 static const uint8_t FP_LED_PURPLE = 0x03;
+// AuraLedConfig control codes: 1=breathing 2=flash 3=on 4=off 5=fade-in 6=fade-out
 static const uint8_t FP_LED_FUNC_STEADY = 3;
+// Speed byte is ignored for steady-on, but must occupy its own parameter slot.
+static const uint8_t FP_LED_SPEED_DEFAULT = 0x80;
 
 USBHIDKeyboard Keyboard;
 HardwareSerial Finger(1);
@@ -273,7 +281,11 @@ static void deleteSlot(uint16_t slot) {
 
 static void setAura(uint8_t color) {
   if (color == currentLed) return;
-  uint8_t params[] = {FP_LED_FUNC_STEADY, color, color, 0};
+  // AuraLedConfig (0x35) parameter order is (control, speed, color, repeat) --
+  // confirmed against the R503Lib reference driver. An earlier revision passed
+  // (control, color, color, 0), which happened to land the color in the right
+  // slot but sent the color value as the speed byte.
+  uint8_t params[] = {FP_LED_FUNC_STEADY, FP_LED_SPEED_DEFAULT, color, 0};
   uint8_t confirm = 0xff;
   fpCommand(0x35, params, sizeof(params), &confirm, nullptr, nullptr, 1000);
   currentLed = color;

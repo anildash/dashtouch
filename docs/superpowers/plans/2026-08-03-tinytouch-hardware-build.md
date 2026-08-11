@@ -2,9 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Get a QT Py ESP32-S3 + ZW111 fingerprint sensor running tinyTouch's
-HID ("red pill") firmware end-to-end on a breadboard — fingerprint touch
-types the real macOS password — before any enclosure work begins.
+**Goal:** Get a QT Py ESP32-S3 + R503-compatible fingerprint sensor running
+tinyTouch's HID ("red pill") firmware end-to-end on a breadboard —
+fingerprint touch types the real macOS password — before any enclosure work
+begins.
+
+**Status as of 2026-08-10:** Tasks 1 and 2 are done. The QT Py is soldered,
+flashed, and verified working over USB CDC (`PING` → `PONG`). The first
+sensor (a ZW111) was diagnosed defective after exhaustive debugging and has
+been replaced with an R503-compatible module (Amazon ASIN B08HM8QDVW),
+**in transit**. Task 3 onward is blocked on that arriving. See
+`docs/superpowers/references/r503-reference.md` for driver libraries,
+example projects, and reference URLs to use once it lands.
 
 **Architecture:** Existing `tiny_touch_keyboard.ino` firmware talks to the
 fingerprint sensor over UART using the `0xEF01` packet protocol and to macOS
@@ -22,7 +31,9 @@ rather than a separate sketch.
 - Board: Adafruit QT Py ESP32-S3, 8MB flash / no PSRAM (#5426).
 - Arduino IDE board settings: `USB CDC on Boot: Enabled`, `USB Mode: USB-OTG`
   (from `firmware/tiny_touch_keyboard/README.md`).
-- Fingerprint sensor: ZW111, UART at 57600 baud, `0xEF01` packet header.
+- Fingerprint sensor: R503-compatible module, UART at 57600 baud (`9600×N`,
+  N=6 default), `0xEF01` packet header. Ships with its own factory-crimped
+  6-pin MX1.0 cable.
 - Never commit `firmware/tiny_touch_keyboard/secrets.h` (already covered by
   the repo's existing guidance; verify `.gitignore` before creating it).
 - Do not enable secure boot / flash encryption during this plan — those are
@@ -31,11 +42,11 @@ rather than a separate sketch.
 
 ## Prerequisites
 
-Before starting Task 1, have in hand: an Adafruit QT Py ESP32-S3 (#5426), a
-ZW111 fingerprint sensor with a 6-pin, 1.0mm-pitch cable (none ships with
-the sensor — source separately), and a USB-C cable. These are
-purchasing steps (see the design spec's Cost/BOM section for sourcing
-links), not engineering tasks, so they aren't broken out below.
+Before starting Task 1, have in hand: an Adafruit QT Py ESP32-S3 (#5426), an
+R503-compatible fingerprint sensor (ships with its own 6-pin MX1.0 cable
+attached), and a USB-C cable. These are purchasing steps (see the design
+spec's Cost/BOM section for sourcing links), not engineering tasks, so they
+aren't broken out below.
 
 ---
 
@@ -51,7 +62,7 @@ links), not engineering tasks, so they aren't broken out below.
 - Produces: a 32-byte pairing key (hex string) that Task 4 copies byte-for-
   byte into `secrets.h`'s `PAIRING_KEY` array.
 
-- [ ] **Step 1: Create the venv and install dependencies**
+- [x] **Step 1: Create the venv and install dependencies** — DONE
 
 ```bash
 cd /Users/anildash/Developer/dashtouch
@@ -62,7 +73,7 @@ pip install -r software/macos-helper/requirements.txt
 
 Expected: `cryptography` and `pyserial` install with no errors.
 
-- [ ] **Step 2: Generate a pairing key and record it**
+- [x] **Step 2: Generate a pairing key and record it** — DONE
 
 ```bash
 openssl rand -hex 32 | tee /tmp/tinytouch-pairing-key.txt
@@ -72,7 +83,8 @@ Expected: a 64-character hex string printed and saved to
 `/tmp/tinytouch-pairing-key.txt`. Keep this terminal/file open — Task 4
 needs these exact bytes.
 
-- [ ] **Step 3: Store the pairing key in Keychain**
+- [x] **Step 3: Store the pairing key in Keychain** — DONE (verified present
+  in Keychain under service `tinyTouch-pairing`)
 
 ```bash
 .venv/bin/python software/macos-helper/tinytouch_helper.py \
@@ -81,7 +93,12 @@ needs these exact bytes.
 
 Expected: command exits 0 with no error output.
 
-- [ ] **Step 4: Store your real macOS password in Keychain**
+- [ ] **Step 4: Store your real macOS password in Keychain** — **NOT DONE,
+  still required.** Verified absent: `security find-generic-password -a
+  tinyTouch -s tinyTouch` returns nothing. Task 5's end-to-end test cannot
+  pass until this is set. **Run this yourself in your own terminal** — it
+  takes your real login password as an argument, so it should not be run
+  through an agent session or pasted into any shared context.
 
 ```bash
 .venv/bin/python software/macos-helper/tinytouch_helper.py \
@@ -92,7 +109,7 @@ Expected: command exits 0. Immediately clear this command from your shell
 history (`history -d <line>` in zsh, or just don't worry about it if your
 shell history isn't persisted/shared).
 
-- [ ] **Step 5: Delete the plaintext pairing-key scratch file**
+- [x] **Step 5: Delete the plaintext pairing-key scratch file** — DONE
 
 ```bash
 rm /tmp/tinytouch-pairing-key.txt
@@ -181,70 +198,120 @@ fingerprint enrollment").
 
 - [ ] **Step 1: Wire on a breadboard (power off)**
 
-The actual sensor received is a **ZW111**, not the ZW101 this plan was
-originally written against (see the design spec's "ZW111 pinout" section).
-The ZW111 exposes 6 pins, not the 5 this step originally listed — it has a
-separate always-on `V_SENSOR` pin distinct from `VCC`, both of which land on
-the QT Py's `3V` pin as two separate wires.
+The sensor now in use is an **R503-compatible module** (Amazon ASIN
+B08HM8QDVW). Its pin order is **different from the ZW111's** — do not reuse
+any earlier ZW111 wiring notes. Full table and sourcing in the design spec's
+"R503 pinout" section.
 
-Connect, with the QT Py ESP32-S3 unpowered (color = this build's convention,
-matching the already-soldered header pin colors):
-- ZW111 pin 1 (V_SENSOR) → QT Py `3V` pin — Red
-- ZW111 pin 3 (VCC) → QT Py `3V` pin, second wire — Red
-- ZW111 pin 6 (GND) → QT Py `GND` pin — Black
-- ZW111 pin 4 (TX) → QT Py pin labeled `RX` (GPIO 16) — White
-- ZW111 pin 5 (RX) → QT Py pin labeled `TX` (GPIO 5) — Green
-- ZW111 pin 2 (TOUCH_OUT) → QT Py pin labeled `A3` (GPIO 8) — White
+This sensor ships with a factory-crimped cable, so identify each wire by its
+**position at the connector** (the housing is printed with `1` at one end
+and `6` at the other), not by guessing from color. Record the actual colors
+once in hand and update the spec's table.
 
-(Sensor TX goes to board RX and vice versa — this is a standard UART
-crossover, not a mistake to double check away. Two wires converging on the
-single `3V` pin is intentional, not a wiring error.)
+Connect, with the QT Py ESP32-S3 unpowered:
 
-- [ ] **Step 2: Install the ESP32 board package and select the board**
+| Sensor pin | Signal | → QT Py pin |
+| --- | --- | --- |
+| 1 | Power Supply (3.3V) | `3V` |
+| 2 | GND | `GND` |
+| 3 | TXD (module → MCU) | `RX` (GPIO 16) |
+| 4 | RXD (MCU → module) | `TX` (GPIO 5) |
+| 5 | WAKEUP (finger detect) | `A3` (GPIO 8) |
+| 6 | 3.3VT (always-on touch power) | `3V`, second wire |
 
-In Arduino IDE: Boards Manager → install "esp32" (Espressif Systems), then
-select **Tools > Board > Adafruit QT Py ESP32-S3**. Set:
+Two things that look like mistakes but aren't: sensor TXD goes to the
+board's `RX` (and RXD to `TX`) — standard UART crossover; and **two wires
+land on the single `3V` pin** (pins 1 and 6), because the touch-detection
+circuit needs power even when the main sensor rail is idle.
+
+Lesson carried over from the ZW111 debugging: if using alligator clips or
+temporary leads, **continuity-check each one through the clip** (probe from
+the wire to the destination pin) before trusting any result. Clips that look
+attached but don't pass continuity cost several hours last time.
+
+- [x] **Step 2: Toolchain and board setup** — DONE
+
+`arduino-cli` is installed (via Homebrew) with the ESP32 core, and the board
+is auto-detected as `esp32:esp32:adafruit_qtpy_esp32s3_nopsram`. The full
+FQBN with the required USB settings baked in:
+
 ```
-USB CDC on Boot: Enabled
-USB Mode: USB-OTG
+esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default
 ```
 
-- [ ] **Step 3: Create a placeholder secrets.h so the sketch compiles**
+(That's the CLI equivalent of `USB CDC on Boot: Enabled` + `USB Mode:
+USB-OTG` in the IDE. Arduino IDE is not required — everything below uses
+`arduino-cli`.)
+
+- [x] **Step 3: Create secrets.h** — DONE, with the real pairing key already
+  written in (not a placeholder). Confirmed gitignored.
+
+- [ ] **Step 4: Flash the firmware**
 
 ```bash
-cp firmware/tiny_touch_keyboard/secrets.example.h firmware/tiny_touch_keyboard/secrets.h
+arduino-cli board list
 ```
 
-(Task 4 fills in the real pairing key; an all-zero key is fine for this
-wiring-only check.)
+Note the `/dev/cu.usbmodemXXX` port (it changes between resets — often
+`101` or `102`), then:
 
-- [ ] **Step 4: Flash and open Serial Monitor**
-
-In Arduino IDE, open `firmware/tiny_touch_keyboard/tiny_touch_keyboard.ino`,
-click Upload, then open Serial Monitor at 115200 baud.
+```bash
+arduino-cli upload --fqbn esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default -p /dev/cu.usbmodemXXX firmware/tiny_touch_keyboard
+```
 
 - [ ] **Step 5: Verify sensor detection**
 
-Expected output within ~2 seconds of boot:
+The boot banner only prints once, right at reset, so catch it by watching
+the port while pressing the physical reset button:
+
+```bash
+.venv/bin/python - <<'EOF'
+import serial, time, glob
+while glob.glob('/dev/cu.usbmodem*'): time.sleep(0.2)   # wait for reset
+while not glob.glob('/dev/cu.usbmodem*'): time.sleep(0.2)  # wait for reconnect
+port = glob.glob('/dev/cu.usbmodem*')[0]
+time.sleep(0.3)
+ser = serial.Serial(port, 115200, timeout=1)
+end = time.time() + 6
+while time.time() < end:
+    line = ser.readline()
+    if line: print(line.decode('utf-8','replace').strip())
+ser.close()
+EOF
+```
+
+Expected:
 ```
 BOOT tinyTouch HID
 READY
 ```
 
-If you instead see:
-```
-BOOT tinyTouch HID
-ERR fingerprint_verify
-```
-the sensor isn't responding — recheck TX/RX aren't swapped, recheck the
-3V/GND connections, and confirm the sensor's LED lights up on power-on.
+`READY` means the sensor answered `VerifyPassword` — UART is working.
+
+If you instead see `ERR fingerprint_verify`, the sensor isn't responding.
+Debug order, learned the hard way on the ZW111:
+1. Confirm the board didn't brown out (does `/dev/cu.usbmodem*` disappear
+   when the sensor is plugged in? → power short, unplug immediately).
+2. Continuity-check GND, both `3V` wires, TXD, and RXD — *through* whatever
+   connector or clip is in the path, not just end to end.
+3. Try swapping TXD/RXD (harmless, and a crossed pair gives silence).
+4. Watch the raw bytes: the firmware's `DEBUG_FP_RAW_ON_FAIL` flag prints
+   `FP_RAW instr=.. bytes_seen=.. data=..` on every failed command. Zero
+   bytes = nothing arriving at all; garbage bytes that never start with
+   `ef01` = wrong baud, crosstalk, or a bad unit.
 
 - [ ] **Step 6: Sanity-check the serial link**
 
-In Serial Monitor's input box, type `PING` and send. Expected response:
+```bash
+.venv/bin/python -c "
+import serial,time
+s=serial.Serial('/dev/cu.usbmodemXXX',115200,timeout=1); s.reset_input_buffer()
+s.write(b'PING\n'); s.flush(); time.sleep(1)
+print(s.readline().decode().strip()); s.close()"
 ```
-PONG
-```
+
+Expected: `PONG`. (This only proves the ESP32↔Mac link, not the sensor —
+it answered `PONG` fine throughout the entire ZW111 failure.)
 
 ---
 
