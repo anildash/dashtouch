@@ -215,6 +215,26 @@ An intermittent power short was also found and fixed along the way (a
 resoldered `3V` wire that had detached and was resting against the adjacent
 `GND` pad) — but fixing it didn't restore communication, which is what
 eventually pointed to the sensor itself being bad rather than the wiring.
+
+**Final diagnosis — the sensor could hear us but could not answer.** A
+follow-up session isolated the failure precisely:
+
+| Observation | Conclusion |
+| --- | --- |
+| The Aura LED reliably obeys an `OFF` command (a state it will never enter on its own) | The sensor powers up, receives UART, parses packets, and executes commands — the **host→sensor** direction works |
+| A sweep of the official `Adafruit_Fingerprint` library across 7 baud rates × both TX/RX orientations (14 combinations, software pin-swap via the ESP32 GPIO matrix) returned `trailing_bytes=0` every time | The sensor **never transmits a single byte** — not garbage, total silence. The earlier "garbage" bytes were noise on a floating line, not sensor data |
+| The sensor's TX line idles at **2.08V** instead of 3.3V, measured with clean wiring | Below the ESP32's ~2.48V (0.75×VDD) logic-high threshold, so no valid idle-high or start bit can ever be detected |
+
+The receive path survived and the transmit output driver did not — an unusual
+but coherent partial failure. Note for future debugging: an idle UART line
+sitting at neither ~3.3V (healthy) nor ~0V (shorted) but at some intermediate
+voltage is a strong tell for a failed or under-driven output stage, and is
+worth measuring early rather than after exhausting the wiring hypotheses.
+
+Diagnostic sketches from this postmortem (`fp_sweep.ino`, a baud/orientation
+brute-forcer built on the official library, and `fp_led.ino`, an LED-only
+probe that tests the host→sensor direction in isolation) are described in
+`docs/superpowers/references/r503-reference.md`.
 Given the exhaustive elimination of every other explanation, and that this
 was a $8.99 unit from a low-review-count listing (one of its four reviews
 independently reported "absolutely unusable" out of the box), the sensor was
