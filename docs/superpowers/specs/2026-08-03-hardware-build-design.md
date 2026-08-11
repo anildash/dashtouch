@@ -17,9 +17,9 @@ HID+PIV composite firmware, and enclosure/CAD design itself.
 | Part | Choice | Why |
 | --- | --- | --- |
 | Microcontroller | [Adafruit QT Py ESP32-S3, 8MB flash / no PSRAM (#5426)](https://www.adafruit.com/product/5426) | Native USB and hardware UART, in stock, small footprint suits a custom wood enclosure. Does **not** expose the same GPIO pins the firmware currently hardcodes (see Firmware section). |
-| Fingerprint sensor (primary) | ZW101 capacitive semiconductor sensor (spec'd) — actual part received was a **ZW111** | Same sensing-tech family as Touch ID (capacitive, not optical/lensed). Tiny bare module (~1x1x1cm, φ21mm bezel, 1.0mm-pitch 6-pin connector), suited to flush-mounting. This is the sensor family the firmware's UART protocol (`0xEF01` header, 57600 baud) was written against. The ZW111 differs from the ZW101 in pinout — see Firmware section — but shares the same `0xEF01` command protocol family (confirmed compatible with the Adafruit Fingerprint Sensor library, which is hardcoded to that header/checksum format), so no firmware protocol rewrite is expected. **No cable ships with the sensor** — source a separate 1.0mm-pitch 6-pin cable (search "1.0mm pitch 6 pin cable", not "JST-PH", which is a different 2.0mm-pitch series some listings mislabel it as). In stock on Amazon (JMT ZW101, EC Buying ZW101), ships in ~4-5 days — actual part received may vary by listing/batch. |
-| Fingerprint sensor (fallback) | R503 capacitive sensor | Same `0xEF01` protocol family, so also a firmware drop-in. Panel-mounts via a threaded M25 metal body and nut rather than sitting flush — fine in a drilled wood recess, but leaves a visible metal ring. Use only if ZW101/ZW111 sourcing becomes unreliable. In stock on Amazon and other electronics resellers. |
-| Enclosure | Custom wood, built by the user | Not designed here. Mounting constraints to carry into that design: ZW101/ZW111 has a flat bezel (no threaded collar), so it mounts into a stepped recess (Forstner bit or CNC pocket sized to the bezel OD and body height) and is secured with flexible adhesive (E6000, hot glue) or a friction-fit/printed retaining ring — not screwed down. **The sensing pad should stay exposed or be covered only by a thin glass/acrylic window, not a wood veneer** — capacitive sensing is validated against uniform dielectric covers (glass/sapphire, ~0.3-0.5mm) in every commercial implementation; wood's grain inconsistency and moisture sensitivity make it a poor, unvalidated capacitive window, likely to cause unreliable or grain-position-dependent matching. R503 needs a drilled through-hole sized for its M25 threaded body plus the retaining nut. |
+| Fingerprint sensor (in use) | **R503** capacitive sensor (GROW, Hangzhou Grow Technology) | Switched to after the originally-sourced ZW111 unit (see below) was diagnosed as defective/DOA. Same `0xEF01` command protocol family as the ZW101/ZW111 (confirmed against the vendor's own R503 user manual, not just inferred) — same header, same 4-byte default address `0xFFFFFFFF`, same checksum formula, same MX1.0-6P connector type, so no firmware protocol changes needed, only the pin-order documentation below. Panel-mounts via a threaded M25 metal body and nut (28mm OD, 23.5mm ID, 19mm height) rather than sitting flush. In stock on Amazon and other electronics resellers, ships with its own 6-pin cable attached. |
+| Fingerprint sensor (superseded) | ZW101 capacitive semiconductor sensor (spec'd) — actual part received was a **ZW111** | Originally chosen for its flush, bezel-less mounting. After extensive hardware debugging (see "ZW111 unit found defective" below), this specific unit never produced a valid protocol response under any wiring, baud rate, or connector tested, despite the firmware's protocol implementation being verified byte-for-byte correct against two independent reference implementations (Adafruit's Fingerprint Sensor Library and a ZW111-specific driver). Kept here for reference since the pin/wiring information may be useful if a replacement ZW111 is tried later. **No cable ships with the sensor** — source a separate 1.0mm-pitch 6-pin cable (search "1.0mm pitch 6 pin cable", not "JST-PH", which is a different 2.0mm-pitch series some listings mislabel it as). |
+| Enclosure | Custom wood, built by the user | Not designed here. Mounting constraint for the R503 (now in use): it has a threaded M25 metal body, so it needs a **drilled through-hole** sized for the threaded body plus a retaining nut on the back side — not a stepped recess. This produces a visible metal bezel around the sensing pad, similar in spirit to Touch ID's own metal ring, rather than a flush hidden mount. **The sensing pad should stay exposed or be covered only by a thin glass/acrylic window, not a wood veneer** — capacitive sensing is validated against uniform dielectric covers (glass/sapphire, ~0.3-0.5mm) in every commercial implementation; wood's grain inconsistency and moisture sensitivity make it a poor, unvalidated capacitive window, likely to cause unreliable or grain-position-dependent matching. (If a ZW101/ZW111 is used instead: flat bezel, no threaded collar, mounts into a stepped recess sized to the bezel OD and body height, secured with flexible adhesive or a friction-fit/printed retaining ring.) |
 | Case STL files in repo | Not used | `hardware/case/case_top.stl` / `case_bottom.stl` were sized for the original author's Seeed ESP32-S3 board and are superseded by the custom wood enclosure. |
 
 ## Cost (BOM) vs. buying Touch ID
@@ -29,8 +29,9 @@ Prices checked live (Adafruit/Amazon/Apple/eBay) as of this spec's date.
 | Item | Price | Source |
 | --- | --- | --- |
 | QT Py ESP32-S3 (#5426) | $12.50 | [adafruit.com](https://www.adafruit.com/product/5426) |
-| ZW101 sensor (JMT, Combo A) | $11.58 | [Amazon](https://www.amazon.com/JMT-Fingerprint-Identification-Capacitive-Semiconductor/dp/B0CWTR6MND) |
-| **Core electronics total** | **~$24** | |
+| R503 sensor | ~$10-20 depending on listing | Amazon / electronics resellers |
+| **Core electronics total** | **~$23-33** | |
+| ZW101/ZW111 sensor (JMT, Combo A) — superseded, unit received was defective | $11.58 | [Amazon](https://www.amazon.com/JMT-Fingerprint-Identification-Capacitive-Semiconductor/dp/B0CWTR6MND) |
 | Apple Magic Keyboard with Touch ID, new (no numpad) | $149.00 | [apple.com](https://www.apple.com/shop/product/mxck3ll/a/) |
 | Apple Magic Keyboard with Touch ID, used (no numpad) | ~$55-65 | live eBay listings; numpad versions run $110-180 used |
 
@@ -147,6 +148,73 @@ expected, not just likely — but still confirm with a real enroll/match cycle
 before spending more time on the enclosure, since minor command-set gaps
 between sensor SKUs are still possible.
 
+### R503 pinout (sensor currently in use)
+
+Confirmed against the vendor's own manual (Hangzhou Grow Technology, "R503
+Fingerprint Module User Manual" Ver 1.1). Connector is MX1.0-6P — same family
+as the ZW111's, but **pin order is different, do not reuse the ZW111 table
+above**:
+
+| Pin | Signal | Note | QT Py pin | Wire color |
+| --- | --- | --- | --- | --- |
+| 1 | Power Supply | DC 3.3V | `3V` | Red |
+| 2 | GND | Signal ground, connected to power ground | `GND` | Black |
+| 3 | TXD | Data output (module → MCU) | `RX` (GPIO 16) | White |
+| 4 | RXD | Data input (MCU → module) | `TX` (GPIO 5) | Green |
+| 5 | WAKEUP | Finger detection signal | `A3` (GPIO 8) | White |
+| 6 | 3.3VT | Touch induction power supply, DC 3-6V, **must stay powered at all times** (same role as the ZW111's `V_SENSOR`) | `3V` (second wire, same header pin as pin 1) | Red |
+
+Same wiring conventions as the ZW111 build: TX/RX cross over (sensor's TXD
+goes to the QT Py's `RX`, not `TX`), two wires converge on the QT Py's
+single `3V` pin (main power + always-on touch power), and wire colors match
+the QT Py header pin each wire lands on rather than a separate vendor code
+(none is specified — this connector ships as a bare crimped cable with no
+documented color standard).
+
+Protocol confirmed directly from the vendor manual, not inferred: `0xEF01`
+2-byte header (high byte first), 4-byte address defaulting to `0xFFFFFFFF`,
+1-byte package identifier (`01`=command, `02`=data, `07`=acknowledge,
+`08`=end of data), 2-byte length field, then payload, then a 2-byte checksum
+that's the arithmetic sum of the package identifier, length, and all payload
+bytes — byte-for-byte identical to the ZW111's protocol and to what
+`tiny_touch_keyboard.ino`'s `fpCommand()` already implements. No firmware
+changes are needed to switch sensors, only the wiring above.
+
+### ZW111 unit found defective
+
+The originally-received ZW111 unit was extensively debugged and never
+produced a single valid protocol response. Ruled out, each confirmed by
+direct measurement rather than assumption:
+
+- Cable wire-to-wire shorts (continuity-checked, none found)
+- QT Py board pad shorts, including reworked pads (continuity-checked, none)
+- Pin order/orientation (verified against the real Hi-Link datasheet)
+- Wire color scheme and physical pin-1 identification
+- GND, both power wires, TX, and RX all making genuine continuity through
+  their connectors (not just visually attached)
+- Four baud rates tested (57600, 115200, 28800, 9600) — none produced a
+  valid `0xEF01`-framed response, only inconsistent raw noise
+- TX/RX physical separation, to rule out crosstalk between adjacent leads
+- The firmware's protocol implementation itself, cross-checked byte-for-byte
+  against two independent reference implementations (the Adafruit
+  Fingerprint Sensor Library and a ZW111-specific driver on GitHub) — no
+  discrepancies found in packet structure, checksum, or instruction codes
+  (one unrelated bug was found and fixed: the LED/aura control command used
+  `0x3c` instead of the correct `0x35`)
+
+An intermittent power short was also found and fixed along the way (a
+resoldered `3V` wire that had detached and was resting against the adjacent
+`GND` pad) — but fixing it didn't restore communication, which is what
+eventually pointed to the sensor itself being bad rather than the wiring.
+Given the exhaustive elimination of every other explanation, and that this
+was a $8.99 unit from a low-review-count listing (one of its four reviews
+independently reported "absolutely unusable" out of the box), the sensor was
+replaced with an R503 rather than continuing to debug this specific unit.
+
+The firmware retains raw-byte debug logging (`DEBUG_FP_RAW_ON_FAIL` in
+`tiny_touch_keyboard.ino`) added during this process, useful for diagnosing
+any future sensor bring-up issue the same way.
+
 ### Known discrepancies in the upstream repo
 
 The top-level `README.md`'s wiring section says to wire the sensor to pins 6
@@ -179,19 +247,24 @@ not while iterating on pin/wiring changes.
 
 ## Build sequence
 
-1. Order QT Py ESP32-S3 and ZW101 sensor (R503 as fallback if ZW101 sourcing
-   fails).
+1. Order QT Py ESP32-S3 and a fingerprint sensor (R503 in use now; ZW101/ZW111
+   was tried first but the unit received was defective — see "ZW111 unit
+   found defective" above).
 2. Set up the macOS helper: generate pairing key, store password in
    Keychain, create `secrets.h`.
-3. Edit `tiny_touch_keyboard.ino` pin constants per the remap above.
-4. Wire the sensor to the QT Py per the remapped pins, breadboard first
+3. Edit `tiny_touch_keyboard.ino` pin constants per the remap above (already
+   done, committed).
+4. Wire the sensor to the QT Py per the R503 pinout above, breadboard first
    (before any enclosure work).
-5. Flash firmware via Arduino IDE with the board settings above, run the
-   helper, verify a full enroll + fingerprint-match + password-type cycle.
+5. Flash firmware via Arduino IDE with the board settings above, use
+   `software/macos-helper/tinytouch_enroll.py` to enroll a fingerprint, run
+   the helper, verify a full enroll + fingerprint-match + password-type
+   cycle.
 6. Only after step 5 is fully working: consider enabling secure boot / flash
    encryption.
 7. Design and build the wood enclosure around the validated electronics,
-   using the mounting constraints noted in the Hardware table.
+   using the mounting constraints noted in the Hardware table (through-hole
+   + retaining nut for the R503's threaded body).
 
 ## Deferred / not in scope for this build
 
@@ -201,5 +274,6 @@ not while iterating on pin/wiring changes.
   path in this repo).
 - DFRobot SEN0542/SEN0348 (ID809-protocol) flush sensor route — would
   require writing a new sensor driver to replace the `0xEF01` protocol
-  layer; only worth it if ZW101's flush mounting turns out insufficient.
+  layer; only worth revisiting if the R503's visible metal bezel turns out
+  aesthetically unacceptable and a flush-mount sensor is wanted again.
 - Enclosure/CAD design — the user is building this themselves.
