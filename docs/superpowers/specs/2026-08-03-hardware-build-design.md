@@ -19,7 +19,7 @@ HID+PIV composite firmware, and enclosure/CAD design itself.
 | Microcontroller | [Adafruit QT Py ESP32-S3, 8MB flash / no PSRAM (#5426)](https://www.adafruit.com/product/5426) | Native USB and hardware UART, in stock, small footprint suits a custom wood enclosure. Does **not** expose the same GPIO pins the firmware currently hardcodes (see Firmware section). |
 | Fingerprint sensor (in use) | **R503-compatible module**, brand "Simlug" ([Amazon, ASIN B08HM8QDVW](https://www.amazon.com/dp/B08HM8QDVW), ~$29.91) | Switched to after the originally-sourced ZW111 unit (see below) was diagnosed as defective/DOA. Same `0xEF01` command protocol family as the ZW101/ZW111 and identical pin table/connector to the genuine GROW R503 (confirmed from this listing's own product images: `Connector: MX1.0-6P`, pins 1-6 = Power Supply/GND/TXD/RXD/WAKEUP/3.3VT, exactly matching the GROW R503 manual) — so the R503 pinout table below applies as-is, no firmware changes needed. Ships with its own attached 6-pin cable, no separate cable sourcing needed (unlike the ZW111). |
 | Fingerprint sensor (superseded) | ZW101 capacitive semiconductor sensor (spec'd) — actual part received was a **ZW111** | Originally chosen for its flush, bezel-less mounting. After extensive hardware debugging (see "ZW111 unit found defective" below), this specific unit never produced a valid protocol response under any wiring, baud rate, or connector tested, despite the firmware's protocol implementation being verified byte-for-byte correct against two independent reference implementations (Adafruit's Fingerprint Sensor Library and a ZW111-specific driver). Kept here for reference since the pin/wiring information may be useful if a replacement ZW111 is tried later. **No cable ships with the sensor** — source a separate 1.0mm-pitch 6-pin cable (search "1.0mm pitch 6 pin cable", not "JST-PH", which is a different 2.0mm-pitch series some listings mislabel it as). |
-| Enclosure | Custom wood, built by the user | Not designed here. Mounting constraint for the R503-compatible module (now in use): it has a threaded metal body, so it needs a **drilled through-hole** sized for the threaded body plus a retaining nut on the back side — not a stepped recess. This produces a visible metal bezel around the sensing pad, similar in spirit to Touch ID's own metal ring, rather than a flush hidden mount. **Dimensions, from this exact listing's own product photos** (not the genuine GROW R503 datasheet — see discrepancy note below): front bezel/face diameter **27.8mm (1.1")**, body height **19mm (0.7")**, threaded shank diameter **16.5mm (0.6")** — drill the through-hole to the shank diameter (16.5mm plus a small clearance fit, confirm against the actual part with calipers before committing, since these figures are read off a marketing photo, not a certified drawing) and countersink/recess the front face by roughly the bezel-to-shank height difference if a flush-ish front is wanted. **The sensing pad should stay exposed or be covered only by a thin glass/acrylic window, not a wood veneer** — capacitive sensing is validated against uniform dielectric covers (glass/sapphire, ~0.3-0.5mm) in every commercial implementation; wood's grain inconsistency and moisture sensitivity make it a poor, unvalidated capacitive window, likely to cause unreliable or grain-position-dependent matching. (If a ZW101/ZW111 is used instead: flat bezel, no threaded collar, mounts into a stepped recess sized to the bezel OD and body height, secured with flexible adhesive or a friction-fit/printed retaining ring.) |
+| Enclosure | Custom wood, built by the user — **false-drawer box, under-desk** | Design settled: see the "Enclosure design" section below. Sensor dimensions (from the listing's own dimensioned photo, **verify with calipers on arrival**): bezel Ø **27.8mm**, body height **19mm**, threaded shank Ø **16.5mm**. **The sensing pad must stay exposed or be covered only by a thin glass/acrylic window, never a wood veneer** — capacitive sensing is validated against uniform dielectric covers (glass/sapphire, ~0.3-0.5mm); wood's grain inconsistency and moisture sensitivity make it an unvalidated capacitive window, likely to cause unreliable or grain-position-dependent matching. |
 | Case STL files in repo | Not used | `hardware/case/case_top.stl` / `case_bottom.stl` were sized for the original author's Seeed ESP32-S3 board and are superseded by the custom wood enclosure. |
 
 ## Cost (BOM) vs. buying Touch ID
@@ -243,6 +243,85 @@ replaced with an R503 rather than continuing to debug this specific unit.
 The firmware retains raw-byte debug logging (`DEBUG_FP_RAW_ON_FAIL` in
 `tiny_touch_keyboard.ino`) added during this process, useful for diagnosing
 any future sensor bring-up issue the same way.
+
+## Enclosure design
+
+A **false-drawer box** mounted under the desktop, immediately beside the
+existing Fully Jarvis handset, with the fingerprint sensor centered on the
+front face where a drawer pull would sit. The goal is that it reads as
+furniture hardware rather than as a device bolted to the desk.
+
+### Geometry
+
+- **Front face angle: 75° from horizontal** (≈15° off plumb, top edge tucked
+  back), matched to the adjacent Jarvis handset's face. Estimated from a
+  photo, not measured — **confirm with a bevel gauge against the actual
+  handset before final assembly.** Side-by-side panels at slightly different
+  angles will read as a mistake.
+- **Side panels are trapezoids**, so the box top sits flush against the desk
+  underside while the front leans back 15°. This is what makes it look
+  built-in rather than tacked on.
+- **Face height ~45-55mm**, driven more by matching the Jarvis handset's
+  visual height than by the sensor (Ø27.8mm plus margin).
+- **Depth ~90-110mm** back under the desk. The sensor's 19mm body extends
+  *backward*, not downward, so knee clearance is governed only by the face
+  height.
+- **Setback from the desk's front edge**: match the Jarvis handset's.
+- Mount the QT Py **beside** the sensor rather than directly behind it, to
+  keep the box shallow.
+- Grain on the front face should run **horizontally**, tying it to the desk
+  edge above it.
+
+### The mounting hole — counterbored both sides
+
+The sensor's ~12-15mm of usable thread is shorter than typical desktop-grade
+plywood, so the panel is counterbored front and back. Both counterbores
+reduce the material the shank traverses, so both *increase* thread
+protrusion:
+
+```
+material the shank passes through = panel thickness − front counterbore − back counterbore
+```
+
+Target leaving **4-5mm of thread proud** for the nut. Worked example on 18mm
+stock with ~13mm usable thread: 3mm front counterbore (Ø~29mm, seats the
+bezel) + 8mm back counterbore (Ø~20mm, nut clearance) → shank traverses 7mm,
+leaving ~6mm proud.
+
+**Gating measurement:** caliper the actual usable thread length the moment
+the sensor arrives. That number determines maximum panel thickness at the
+sensor location, and everything else follows from it. Do not drill first.
+
+### Drilling sequence
+
+A Forstner bit needs its center spur to have material to bite, so the
+through-hole goes **last**:
+
+1. Small pilot (~3mm) all the way through — the shared alignment reference
+   for every subsequent cut. (A drill guide holding the bits in alignment
+   makes this straightforward.)
+2. Front counterbore, large Forstner, centered on the pilot.
+3. Flip; back counterbore, smaller Forstner, also centered on the pilot.
+4. Through-hole last, ~17mm for clearance on the 16.5mm shank.
+
+Drilling the through-hole early destroys the centering reference for both
+Forstner cuts. Keep the pilot small for the same reason — an oversized pilot
+leaves the spur nothing to grip.
+
+Test the full sequence in scrap of the same stock first. Plywood tears out on
+the exit side of large Forstner cuts; use a sacrificial backer, or cut the
+front counterbore before trimming the panel to final size.
+
+### Assembly notes
+
+- Make the **bottom or back panel removable** (screwed, not glued). Service
+  access will be needed at least once — reflashing, a reseated connector, or
+  a sensor swap.
+- **Fasten from inside**: screws up through the box's top panel into the desk
+  underside, so no hardware is visible on the finished piece.
+- USB-C exits the back and runs along the desk underside.
+- The aura LED ring makes the "knob" glow — idle animation plus green on a
+  successful match. Worth treating as a deliberate design element.
 
 ### Known discrepancies in the upstream repo
 
