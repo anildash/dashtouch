@@ -272,45 +272,47 @@ furniture hardware rather than as a device bolted to the desk.
 - Grain on the front face should run **horizontally**, tying it to the desk
   edge above it.
 
-### The mounting hole — counterbored both sides
+### The mounting hole — back counterbore only
+
+**The front face is not counterbored.** The sensor's flange sits proud on the
+surface, like real drawer hardware — that's the whole point of the design.
 
 The sensor's ~12-15mm of usable thread is shorter than typical desktop-grade
-plywood, so the panel is counterbored front and back. Both counterbores
-reduce the material the shank traverses, so both *increase* thread
-protrusion:
+plywood, so the panel is relieved from behind:
 
 ```
-material the shank passes through = panel thickness − front counterbore − back counterbore
+thread proud = usable thread − (panel thickness − back counterbore)
 ```
 
 Target leaving **4-5mm of thread proud** for the nut. Worked example on 18mm
-stock with ~13mm usable thread: 3mm front counterbore (Ø~29mm, seats the
-bezel) + 8mm back counterbore (Ø~20mm, nut clearance) → shank traverses 7mm,
-leaving ~6mm proud.
+stock with ~13mm usable thread: a 10mm back counterbore (Ø~20mm, nut
+clearance) leaves 8mm traversed and ~5mm proud.
 
 **Gating measurement:** caliper the actual usable thread length the moment
 the sensor arrives. That number determines maximum panel thickness at the
 sensor location, and everything else follows from it. Do not drill first.
+
+Useful tolerance: the Ø27.8mm flange sits over a Ø17mm hole, covering a
+~5.4mm ring of the front face. Minor tearout at the hole edge is hidden
+under the flange, so the front cut does not need to be perfect.
 
 ### Drilling sequence
 
 A Forstner bit needs its center spur to have material to bite, so the
 through-hole goes **last**:
 
-1. Small pilot (~3mm) all the way through — the shared alignment reference
-   for every subsequent cut. (A drill guide holding the bits in alignment
-   makes this straightforward.)
-2. Front counterbore, large Forstner, centered on the pilot.
-3. Flip; back counterbore, smaller Forstner, also centered on the pilot.
-4. Through-hole last, ~17mm for clearance on the 16.5mm shank.
+1. Mark the center on the **front** face (that position is what's visible and
+   what has to look centered), then drill a small pilot (~3mm) all the way
+   through. That pilot is the alignment reference for everything after.
+2. Flip; back counterbore with the Forstner, centered on the pilot.
+3. Through-hole last, ~17mm for clearance on the 16.5mm shank.
 
-Drilling the through-hole early destroys the centering reference for both
-Forstner cuts. Keep the pilot small for the same reason — an oversized pilot
-leaves the spur nothing to grip.
+Drilling the through-hole early destroys the Forstner's centering reference.
+Keep the pilot small for the same reason — an oversized pilot leaves the spur
+nothing to grip.
 
-Test the full sequence in scrap of the same stock first. Plywood tears out on
-the exit side of large Forstner cuts; use a sacrificial backer, or cut the
-front counterbore before trimming the panel to final size.
+Test the sequence in scrap of the same stock first. Plywood tears out on the
+exit side of large Forstner cuts; clamp a sacrificial backer behind the work.
 
 ### Assembly notes
 
