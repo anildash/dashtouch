@@ -19,7 +19,7 @@ HID+PIV composite firmware, and enclosure/CAD design itself.
 | Microcontroller | [Adafruit QT Py ESP32-S3, 8MB flash / no PSRAM (#5426)](https://www.adafruit.com/product/5426) | Native USB and hardware UART, in stock, small footprint suits a custom wood enclosure. Does **not** expose the same GPIO pins the firmware currently hardcodes (see Firmware section). |
 | Fingerprint sensor (in use) | **R503-compatible module**, brand "Simlug" ([Amazon, ASIN B08HM8QDVW](https://www.amazon.com/dp/B08HM8QDVW), ~$29.91) | Switched to after the originally-sourced ZW111 unit (see below) was diagnosed as defective/DOA. Same `0xEF01` command protocol family as the ZW101/ZW111 and identical pin table/connector to the genuine GROW R503 (confirmed from this listing's own product images: `Connector: MX1.0-6P`, pins 1-6 = Power Supply/GND/TXD/RXD/WAKEUP/3.3VT, exactly matching the GROW R503 manual) — so the R503 pinout table below applies as-is, no firmware changes needed. Ships with its own attached 6-pin cable, no separate cable sourcing needed (unlike the ZW111). |
 | Fingerprint sensor (superseded) | ZW101 capacitive semiconductor sensor (spec'd) — actual part received was a **ZW111** | Originally chosen for its flush, bezel-less mounting. After extensive hardware debugging (see "ZW111 unit found defective" below), this specific unit never produced a valid protocol response under any wiring, baud rate, or connector tested, despite the firmware's protocol implementation being verified byte-for-byte correct against two independent reference implementations (Adafruit's Fingerprint Sensor Library and a ZW111-specific driver). Kept here for reference since the pin/wiring information may be useful if a replacement ZW111 is tried later. **No cable ships with the sensor** — source a separate 1.0mm-pitch 6-pin cable (search "1.0mm pitch 6 pin cable", not "JST-PH", which is a different 2.0mm-pitch series some listings mislabel it as). |
-| Enclosure | Custom wood, built by the user — **false-drawer box, under-desk** | Design settled: see the "Enclosure design" section below. Sensor dimensions (from the listing's own dimensioned photo, **verify with calipers on arrival**): bezel Ø **27.8mm**, body height **19mm**, threaded shank Ø **16.5mm**. **The sensing pad must stay exposed or be covered only by a thin glass/acrylic window, never a wood veneer** — capacitive sensing is validated against uniform dielectric covers (glass/sapphire, ~0.3-0.5mm); wood's grain inconsistency and moisture sensitivity make it an unvalidated capacitive window, likely to cause unreliable or grain-position-dependent matching. |
+| Enclosure | Custom wood, built by the user — **false-drawer box, under-desk** | Design settled: see the "Enclosure design" section below. Sensor dimensions (**verify all with calipers on arrival**): flange Ø **27.8mm**, total body height **19mm**, threaded barrel height **16.5mm**, threaded barrel Ø **~23.5mm** (from the GROW R503 manual: outer Ø 28mm, inner Ø 23.5mm, height 19mm, thread M25 — these match the listing photo's flange and height figures, so the same barrel diameter should apply). **Note:** the 16.5mm figure on the listing's dimensioned photo is a *height* (the barrel below the flange), not a diameter — an earlier revision of this spec misread it as the shank diameter and specified a ~17mm hole, which would be far too small. **The sensing pad must stay exposed or be covered only by a thin glass/acrylic window, never a wood veneer** — capacitive sensing is validated against uniform dielectric covers (glass/sapphire, ~0.3-0.5mm); wood's grain inconsistency and moisture sensitivity make it an unvalidated capacitive window, likely to cause unreliable or grain-position-dependent matching. |
 | Case STL files in repo | Not used | `hardware/case/case_top.stl` / `case_bottom.stl` were sized for the original author's Seeed ESP32-S3 board and are superseded by the custom wood enclosure. |
 
 ## Cost (BOM) vs. buying Touch ID
@@ -277,24 +277,34 @@ furniture hardware rather than as a device bolted to the desk.
 **The front face is not counterbored.** The sensor's flange sits proud on the
 surface, like real drawer hardware — that's the whole point of the design.
 
-The sensor's ~12-15mm of usable thread is shorter than typical desktop-grade
-plywood, so the panel is relieved from behind:
+The threaded barrel is 16.5mm tall — shorter than 3/4" (19mm) plywood — so
+the panel is relieved from behind to get enough thread through for the nut:
 
 ```
-thread proud = usable thread − (panel thickness − back counterbore)
+thread proud = 16.5mm − (panel thickness − back counterbore depth)
 ```
 
-Target leaving **4-5mm of thread proud** for the nut. Worked example on 18mm
-stock with ~13mm usable thread: a 10mm back counterbore (Ø~20mm, nut
-clearance) leaves 8mm traversed and ~5mm proud.
+Target leaving **4-5mm of thread proud**. On 3/4" (19mm) ply, a **5/16"
+(~8mm) back counterbore** leaves 11mm of material and ~5.5mm proud.
 
-**Gating measurement:** caliper the actual usable thread length the moment
-the sensor arrives. That number determines maximum panel thickness at the
-sensor location, and everything else follows from it. Do not drill first.
+Hole sizes (**confirm against the actual part first**):
 
-Useful tolerance: the Ø27.8mm flange sits over a Ø17mm hole, covering a
-~5.4mm ring of the front face. Minor tearout at the hole edge is hidden
-under the flange, so the front cut does not need to be perfect.
+| Cut | Target | Imperial bit |
+| --- | --- | --- |
+| Through-hole | barrel Ø + ~0.5mm | **15/16"** if the barrel measures 23.5mm; **1"** if it measures 25mm |
+| Back counterbore | must clear the nut *and* leave room to grip or spanner it | ~**1-1/4"**, sized off the measured nut OD |
+| Counterbore depth | ~8mm | **5/16"** |
+
+**Gating measurements before any drilling:** caliper (a) the threaded
+barrel's diameter, since "M25" nominally means 25mm but the manual's
+23.5mm may be the real figure — a 1.5mm spread that changes the bit size;
+(b) the barrel height; and (c) the nut's outside diameter.
+
+**The flange does not hide much.** A Ø27.8mm flange over a ~Ø23.8mm hole
+leaves only ~2mm of bearing ring, so tearout at the hole edge *will* show.
+Score the face first or use a backer — the front cut needs to be clean.
+(An earlier revision of this spec wrongly claimed a ~5.4mm ring would hide
+imperfections; that was based on the mis-read 16.5mm shank diameter.)
 
 ### Drilling sequence
 
@@ -305,7 +315,8 @@ through-hole goes **last**:
    what has to look centered), then drill a small pilot (~3mm) all the way
    through. That pilot is the alignment reference for everything after.
 2. Flip; back counterbore with the Forstner, centered on the pilot.
-3. Through-hole last, ~17mm for clearance on the 16.5mm shank.
+3. Through-hole last, sized to the measured barrel diameter plus ~0.5mm
+   (likely 15/16", possibly 1" — see the table above).
 
 Drilling the through-hole early destroys the Forstner's centering reference.
 Keep the pilot small for the same reason — an oversized pilot leaves the spur
