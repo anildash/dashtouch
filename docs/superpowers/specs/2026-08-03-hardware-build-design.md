@@ -246,10 +246,48 @@ any future sensor bring-up issue the same way.
 
 ## Enclosure design
 
-A **false-drawer box** mounted under the desktop, immediately beside the
-existing Fully Jarvis handset, with the fingerprint sensor centered on the
-front face where a drawer pull would sit. The goal is that it reads as
-furniture hardware rather than as a device bolted to the desk.
+Built from **3/4" (19mm) plywood**, mounted under the desktop immediately
+beside the existing Fully Jarvis handset, with the fingerprint sensor
+centered on the angled front face where a drawer pull would sit. The goal is
+that it reads as furniture hardware — a false drawer front — rather than as a
+device bolted to the desk. Matches the drawer already built on the left side
+of the desk.
+
+### Form: two pieces, an "L" in section
+
+Not a box. There is very little to house — the sensor and a QT Py total maybe
+15 grams — so the minimum viable structure is two rectangles of 3/4" ply:
+
+1. **Top piece**, horizontal, flat against the desk underside. This is the
+   mounting element.
+2. **Front piece**, cut at 15° off plumb, attached to the front edge of the
+   top piece (pocket screws from behind).
+
+Optional small side triangles if it proves floppy, though at this size it
+likely won't. No back or bottom needed; an open back also makes the cable run
+to the Mac Studio (mounted directly behind) easier.
+
+### Mounting: screw up through the *horizontal* piece
+
+Screws run vertically through the top piece into the desk underside, with
+counterbored heads — the same method already used for the left-side drawer's
+outer pieces.
+
+**Do not try to screw up through the angled front face.** A vertical hole
+through a tilted board drifts sideways as it travels:
+
+```
+lateral drift = face height × tan(tilt angle)
+```
+
+At 15° over a 50mm face that is ~13.4mm of drift, more than 3/4" ply is
+thick, so the screw breaks out the side. This is why the horizontal piece
+exists. (Shallower angles or shorter faces can make face-mounting viable —
+10° over a 50mm face drifts only 8.8mm — but that means giving up the angle
+match with the Jarvis handset.)
+
+Limit penetration into the ~18mm desktop to **12-14mm** so nothing breaks
+through the top surface; use a stop collar or tape flag on the bit.
 
 ### Geometry
 
@@ -258,19 +296,29 @@ furniture hardware rather than as a device bolted to the desk.
   photo, not measured — **confirm with a bevel gauge against the actual
   handset before final assembly.** Side-by-side panels at slightly different
   angles will read as a mistake.
-- **Side panels are trapezoids**, so the box top sits flush against the desk
-  underside while the front leans back 15°. This is what makes it look
-  built-in rather than tacked on.
 - **Face height ~45-55mm**, driven more by matching the Jarvis handset's
   visual height than by the sensor (Ø27.8mm plus margin).
-- **Depth ~90-110mm** back under the desk. The sensor's 19mm body extends
-  *backward*, not downward, so knee clearance is governed only by the face
-  height.
+- **Width**: match the existing left-side drawer. Mechanical floor is ~54mm
+  (flange plus margins plus walls), but at that width the face is nearly
+  square and stops reading as a drawer. Width is *not* driven by the
+  electronics — the QT Py (21.7 × 17.8mm) is smaller than the Ø27.8mm flange.
+- **Depth**: enough for the sensor body (19mm behind the face), the connector
+  plug and its cable bend (~15-20mm — easy to underestimate), and the QT Py.
+  Roughly 50-60mm minimum if the QT Py sits behind the sensor; less if it
+  sits beside it.
 - **Setback from the desk's front edge**: match the Jarvis handset's.
-- Mount the QT Py **beside** the sensor rather than directly behind it, to
-  keep the box shallow.
 - Grain on the front face should run **horizontally**, tying it to the desk
   edge above it.
+
+### Assembly notes
+
+- Strain-relieve the USB-C cable to the wood — a small cleat with a zip tie,
+  or two screws with a cable loop between them. A tug should pull against
+  plywood, not against the QT Py's connector.
+- Keep at least one element removable (screwed, not glued) for service
+  access: reflashing, a reseated connector, or a sensor swap.
+- The aura LED ring makes the "knob" glow — idle animation plus green on a
+  successful match. Worth treating as a deliberate design element.
 
 ### The mounting hole — back counterbore only
 
@@ -284,16 +332,36 @@ the panel is relieved from behind to get enough thread through for the nut:
 thread proud = 16.5mm − (panel thickness − back counterbore depth)
 ```
 
-Target leaving **4-5mm of thread proud**. On 3/4" (19mm) ply, a **5/16"
-(~8mm) back counterbore** leaves 11mm of material and ~5.5mm proud.
+On 3/4" (19mm) ply:
+
+| Counterbore depth | Thread proud | Ply left at hole |
+| --- | --- | --- |
+| 1/4" | 3.8mm | 12.7mm |
+| **3/8" ← use this** | **7.0mm** | **9.5mm** |
+| 1/2" | 10.1mm | 6.4mm |
+
+**3/8" (9.5mm) is the recommended depth** — 7mm of thread proud is more than
+any panel nut needs, while leaving 9.5mm of ply. 1/2" is also safe if more
+wrench room is wanted; the part weighs ~15g, so the remaining web is not
+under meaningful load. Deeper than 1/2" risks chipping the web out when the
+nut is tightened.
 
 Hole sizes (**confirm against the actual part first**):
 
 | Cut | Target | Imperial bit |
 | --- | --- | --- |
-| Through-hole | barrel Ø + ~0.5mm | **15/16"** if the barrel measures 23.5mm; **1"** if it measures 25mm |
+| Through-hole | barrel Ø + ~0.5mm | **15/16"** (23.81mm) |
 | Back counterbore | must clear the nut *and* leave room to grip or spanner it | ~**1-1/4"**, sized off the measured nut OD |
-| Counterbore depth | ~8mm | **5/16"** |
+| Counterbore depth | 9.5mm | **3/8"** |
+
+**On the through-hole diameter:** the R503 manual lists the barrel as
+**23.5mm** while separately calling the thread "M25" — the latter is almost
+certainly a nominal designation, since a true ISO M25 thread cannot live on a
+23.5mm barrel. Trust the measured figure. Start at **15/16"**, test-fit in
+scrap, and step up to 1" only if the real barrel measures 25mm. Do not hedge
+upward preemptively: the Ø27.8mm flange overlaps a 15/16" hole by only ~2mm
+per side, and a 1" hole cuts that to ~1.2mm, leaving the flange very little
+wood to bear on.
 
 **Gating measurements before any drilling:** caliper (a) the threaded
 barrel's diameter, since "M25" nominally means 25mm but the manual's

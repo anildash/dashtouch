@@ -7,13 +7,52 @@ tinyTouch's HID ("red pill") firmware end-to-end on a breadboard —
 fingerprint touch types the real macOS password — before any enclosure work
 begins.
 
-**Status as of 2026-08-10:** Tasks 1 and 2 are done. The QT Py is soldered,
-flashed, and verified working over USB CDC (`PING` → `PONG`). The first
-sensor (a ZW111) was diagnosed defective after exhaustive debugging and has
-been replaced with an R503-compatible module (Amazon ASIN B08HM8QDVW),
-**in transit**. Task 3 onward is blocked on that arriving. See
-`docs/superpowers/references/r503-reference.md` for driver libraries,
-example projects, and reference URLs to use once it lands.
+**Status as of 2026-08-11 — read this first when picking up on another
+machine.**
+
+Everything except the sensor is done and verified:
+
+- QT Py soldered, flashed, talking over USB CDC (`PING` → `PONG`).
+- Firmware pin mapping fixed for the QT Py's real GPIOs (TX=5, RX=16,
+  INT=8/A3). Committed.
+- Enrollment built into the firmware (`ENROLL`/`DELETE` serial commands plus
+  `software/macos-helper/tinytouch_enroll.py`) — this did not exist upstream.
+- Two Aura LED bugs fixed against a reference driver (wrong color codes,
+  wrong parameter order). Compile-clean but **unverified on hardware**.
+- Keychain password **and** pairing key both set; `secrets.h` verified to
+  hold the same pairing key as the Keychain; `--self-test` passes. The whole
+  crypto path is proven without the sensor.
+
+**Blocked on:** the replacement sensor, an R503-compatible module (Amazon
+ASIN B08HM8QDVW), in transit. The first sensor (a ZW111) was diagnosed
+defective — it received commands fine but never transmitted; see the design
+spec's "ZW111 unit found defective" section.
+
+**Setup needed on a fresh machine:**
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r software/macos-helper/requirements.txt
+brew install arduino-cli
+arduino-cli config init
+arduino-cli config set board_manager.additional_urls \
+  https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+arduino-cli core update-index && arduino-cli core install esp32:esp32
+arduino-cli lib install "Adafruit Fingerprint Sensor Library"
+```
+
+`secrets.h` is gitignored and will need recreating from
+`secrets.example.h` with the pairing key from Keychain. The Keychain entries
+themselves are per-machine, so `--set-pairing-key` and `--set-password` must
+be re-run there (and the same pairing key written into `secrets.h`).
+
+`reference/` is gitignored (~16MB of cloned repos) — re-clone with the
+commands in `docs/superpowers/references/r503-reference.md`.
+
+**See also:** that same reference doc for driver libraries, prior-art
+projects, and gotchas; `firmware/diagnostics/` for the two bring-up sketches
+and how to read their output; and the design spec's "Enclosure design"
+section for the woodworking.
 
 **Architecture:** Existing `tiny_touch_keyboard.ino` firmware talks to the
 fingerprint sensor over UART using the `0xEF01` packet protocol and to macOS
