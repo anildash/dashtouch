@@ -133,3 +133,36 @@ def test_event_types_bump_seq():
     d.handle_line("TYPED")
     assert d.state["event_seq"] == 2
     assert d.state["last_line"] == "TYPED"
+
+
+# -- Task 7e: tolerant init + health() ---------------------------------------
+
+def test_construct_survives_missing_keychain_entries():
+    with mock.patch.object(daemon.keychain, "get_pairing_key",
+                            side_effect=daemon.keychain.KeychainError("not found")), \
+         mock.patch.object(daemon.keychain, "get_password",
+                            side_effect=daemon.keychain.KeychainError("not found")):
+        d = daemon.Daemon("SER1")
+    assert d.pairing_key is None
+    assert d._password is None
+    rows = {r["id"]: r for r in d.health()}
+    assert rows["password"]["ok"] is False
+    assert rows["pairing"]["ok"] is False
+
+
+def test_unconfigured_ev_writes_nothing_and_logs_helper_event():
+    d = make_daemon()
+    d.pairing_key = None
+    d.handle_line(VECTORS["ev_line"])
+    assert d._ser.written == []
+    helper_events = [e for e in d.events if e["dir"] == "helper"]
+    assert any("Mac-side setup is incomplete" in e["text"] for e in helper_events)
+
+
+def test_tampered_ev_counts_hmac_failure_and_fails_pairing_health():
+    d = make_daemon()
+    bad = VECTORS["ev_line"][:-1] + ("0" if VECTORS["ev_line"][-1] != "0" else "1")
+    d.handle_line(bad)
+    assert d.state["hmac_failures"] == 1
+    rows = {r["id"]: r for r in d.health()}
+    assert rows["pairing"]["ok"] is False

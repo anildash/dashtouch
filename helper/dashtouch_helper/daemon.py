@@ -5,6 +5,7 @@ this process, never to the port directly.
 """
 from __future__ import annotations
 
+import pathlib
 import sys
 import threading
 import time
@@ -19,8 +20,17 @@ class Daemon:
     def __init__(self, serial_number: str, port: str | None = None):
         self.serial_number = serial_number
         self.port = port
-        self.pairing_key = keychain.get_pairing_key(serial_number)
-        self._password = keychain.get_password(serial_number)
+        # Tolerant: a fresh checkout (or a setup that never finished) has
+        # nothing in the Keychain yet. Run anyway — health() surfaces the
+        # gap instead of the process refusing to start.
+        try:
+            self.pairing_key = keychain.get_pairing_key(serial_number)
+        except keychain.KeychainError:
+            self.pairing_key = None
+        try:
+            self._password = keychain.get_password(serial_number)
+        except keychain.KeychainError:
+            self._password = None
         self._last_counter = 0
         self._ser = None
         self._write_lock = threading.Lock()
@@ -28,7 +38,7 @@ class Daemon:
         self.events: list[dict] = []
         self.state = {"connected": False, "last_line": "", "sensor": "unknown",
                       "fw": "unknown", "enroll_stage": "", "cap": "",
-                      "slots_used": [], "event_seq": 0}
+                      "slots_used": [], "event_seq": 0, "hmac_failures": 0}
 
     # -- connection lifecycle -----------------------------------------------
     def _on_connect(self) -> None:
@@ -70,11 +80,24 @@ class Daemon:
         elif line.startswith("EV "):
             # Nonce/counter/hmac aren't secrets without the pairing key.
             self.log_event("device", line)
+            if self.pairing_key is None or self._password is None:
+                # Setup never finished on this Mac. Don't even try to verify —
+                # the device's own yellow-ring timeout is the designed symptom.
+                msg = "match arrived, but Mac-side setup is incomplete — run ./setup"
+                print(msg, file=sys.stderr)
+                self.log_event("helper", msg)
+                return
             try:
                 ev = protocol.verify_ev(self.pairing_key, line, self._last_counter)
             except protocol.ProtocolError as e:
                 print(f"rejected EV: {e}", file=sys.stderr)
                 self.log_event("helper", f"rejected EV: {e}")
+                if "HMAC" in str(e):
+                    self.state["hmac_failures"] += 1
+                    self.log_event("helper",
+                        f"pairing check failed ({self.state['hmac_failures']} rejected "
+                        "signature(s) so far) — the gadget and this Mac may hold "
+                        "different keys")
                 return
             self._last_counter = ev.counter
             reply = protocol.encrypt_password(self.pairing_key, ev.nonce,
@@ -110,6 +133,72 @@ class Daemon:
         elif line:
             print(f"device: {line}")
             self.log_event("device", line)
+
+    # -- health snapshot (backs the web UI's Checkup list) -------------------
+    def health(self) -> list[dict]:
+        """Computed fresh on every call — cheap checks, no caching needed."""
+        connected = self.state["connected"]
+        rows = []
+
+        rows.append({
+            "id": "device",
+            "label": "Device",
+            "ok": connected,
+            "detail": f"Connected — firmware {self.state['fw']}" if connected
+                      else "Not connected",
+            "fix": "help-not-connected",
+        })
+
+        if not connected:
+            sensor_ok, sensor_detail = None, "Can't check — connect the device first"
+        elif self.state["sensor"] == "ok":
+            sensor_ok, sensor_detail = True, "Sensor's talking"
+        else:
+            sensor_ok, sensor_detail = False, "Not answering — check the wiring"
+        rows.append({
+            "id": "sensor",
+            "label": "Sensor",
+            "ok": sensor_ok,
+            "detail": sensor_detail,
+            "fix": "help-no-purple",
+        })
+
+        rows.append({
+            "id": "password",
+            "label": "Password",
+            "ok": self._password is not None,
+            "detail": "In your Keychain" if self._password is not None
+                      else "Not set up yet",
+            "fix": "help-password",
+        })
+
+        n = self.state["hmac_failures"]
+        if n > 0:
+            pairing_ok = False
+            pairing_detail = f"{n} rejected signatures — the gadget and this Mac disagree"
+        elif self.pairing_key is not None:
+            pairing_ok, pairing_detail = True, "Paired"
+        else:
+            pairing_ok, pairing_detail = False, "Key missing"
+        rows.append({
+            "id": "pairing",
+            "label": "Pairing",
+            "ok": pairing_ok,
+            "detail": pairing_detail,
+            "fix": "help-pairing",
+        })
+
+        plist = pathlib.Path.home() / "Library" / "LaunchAgents" / "com.dashtouch.helper.plist"
+        rows.append({
+            "id": "autostart",
+            "label": "Autostart",
+            "ok": None,  # info row, never red — running by hand is a fine choice
+            "detail": "Runs automatically at login" if plist.exists()
+                      else "Only while you run it by hand",
+            "fix": "help-autostart",
+        })
+
+        return rows
 
     # -- I/O ----------------------------------------------------------
     def send_command(self, line: str) -> None:

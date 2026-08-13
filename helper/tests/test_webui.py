@@ -7,6 +7,14 @@ from types import SimpleNamespace
 from dashtouch_helper import webui
 
 
+CANNED_HEALTH = [
+    {"id": "device", "label": "Device", "ok": True,
+     "detail": "Connected — firmware dt-0.1.0", "fix": "help-not-connected"},
+    {"id": "password", "label": "Password", "ok": False,
+     "detail": "Not set up yet", "fix": "help-password"},
+]
+
+
 class FakeDaemon:
     def __init__(self):
         self.state = {"connected": True, "sensor": "ok", "fw": "dt-0.1.0",
@@ -21,6 +29,9 @@ class FakeDaemon:
 
     def log_event(self, direction, text):
         self.events.append({"t": time.time(), "dir": direction, "text": text})
+
+    def health(self):
+        return CANNED_HEALTH
 
 
 def start():
@@ -52,6 +63,13 @@ def test_status_carries_slots_used():
     status, body = req(host, port, "GET", "/api/status")
     assert status == 200
     assert body["slots_used"] == [1, 3]
+
+
+def test_status_carries_health_rows():
+    d, host, port, token = start()
+    status, body = req(host, port, "GET", "/api/status")
+    assert status == 200
+    assert body["health"] == CANNED_HEALTH
 
 
 def test_enroll_without_token_rejected():

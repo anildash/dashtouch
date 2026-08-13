@@ -64,6 +64,7 @@ def _make_handler(daemon):
             elif path == "/api/status":
                 st = dict(daemon.state)
                 st["slots"] = _load_labels()
+                st["health"] = daemon.health()
                 self._json(200, st)
             elif path == "/api/log":
                 if not secrets.compare_digest(self.headers.get("X-DT-Token") or "", _TOKEN):

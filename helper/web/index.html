@@ -19,6 +19,9 @@
             <div class="ring ring--dark" id="ring"></div>
             <p class="ring-label" id="ring-label">Not connected</p>
           </div>
+          <p class="health-summary" id="health-summary" hidden>
+            <span class="dot dot--red"></span> Something needs attention &mdash; see Checkup
+          </p>
           <p id="conn">Checking&hellip;</p>
           <p id="sensorline"></p>
           <p id="capline"></p>
@@ -30,6 +33,13 @@
             <li><span class="dot dot--red"></span> Red &mdash; no match, or trouble</li>
             <li><span class="dot dot--yellow"></span> Yellow &mdash; can't reach your Mac</li>
           </ul>
+        </section>
+
+        <section class="card" id="checkup-card">
+          <h2>Checkup</h2>
+          <p class="hint">Is the whole chain set up right, end to end? This
+          updates itself as you fix things.</p>
+          <ul class="checkup" id="checkup"></ul>
         </section>
       </aside>
 
@@ -61,6 +71,63 @@
             <li><strong>Nothing on this page at all?</strong> The helper serves
             this page &mdash; if it stopped, so did this.</li>
           </ul>
+
+          <div class="help-entries">
+            <div class="help-entry" id="help-yellow">
+              <h3>My ring is yellow &mdash; why?</h3>
+              <p>The gadget recognized a finger but couldn't reach your Mac.
+              Either the helper isn't running &mdash; start it with
+              <code>.venv/bin/dashtouch run</code>, or make that automatic with
+              <code>.venv/bin/dashtouch install-agent</code> &mdash; or setup
+              never finished on the Mac side (run <code>./setup</code>).
+              Either way, the yellow clears itself on the next successful
+              touch &mdash; there's nothing to reset by hand.</p>
+            </div>
+            <div class="help-entry" id="help-not-connected">
+              <h3>Your device says "Not connected"</h3>
+              <p>Check that the cable is seated firmly at both ends. Some
+              USB-C cables carry power but no data &mdash; try the one you'd
+              use for an external drive or camera instead. Still nothing?
+              Try a different port; some hubs are picky.</p>
+            </div>
+            <div class="help-entry" id="help-no-purple">
+              <h3>The ring (or this page) never turns purple</h3>
+              <p>The firmware can't reach the sensor &mdash; almost always a
+              wiring problem. Count the wires: all six connected? The white
+              one (touch power) is the classic miss &mdash; without it the
+              sensor can hear commands but can't answer, so every symptom
+              looks like a dead sensor even when it isn't. The
+              <a href="https://github.com/anildash/dashtouch/blob/main/docs/troubleshooting.md" target="_blank" rel="noopener">Troubleshooting guide</a>
+              walks through it wire by wire.</p>
+            </div>
+            <div class="help-entry" id="help-password">
+              <h3>Password isn't set up</h3>
+              <p>Run <code>./setup</code> &mdash; it walks you through it.
+              Your Mac password lives only in your Keychain; this page never
+              sees it, and neither does the gadget. Changed your Mac
+              password recently? Re-run <code>./setup</code> to refresh the
+              Keychain copy.</p>
+            </div>
+            <div class="help-entry" id="help-pairing">
+              <h3>Pairing looks broken</h3>
+              <p>The gadget and this Mac are holding different keys, so
+              every signature the gadget sends gets rejected. The classic
+              cause: <code>./setup</code> ran again and wrote a fresh key to
+              your Keychain, but the flash step got skipped, so the board is
+              still carrying the old one. Fix: run <code>./setup</code>
+              again with the board plugged in over USB, and let it flash.</p>
+            </div>
+            <div class="help-entry" id="help-autostart">
+              <h3>About autostart</h3>
+              <p><code>.venv/bin/dashtouch install-agent</code> installs a
+              login item that starts the helper automatically whenever you
+              log in, so you don't have to remember to run it by hand. To
+              undo it:
+              <code>launchctl unload ~/Library/LaunchAgents/com.dashtouch.helper.plist</code>
+              (delete that file too if you want it gone for good).</p>
+            </div>
+          </div>
+
           <p class="help-links">
             <a href="https://github.com/anildash/dashtouch" target="_blank" rel="noopener">Project on GitHub</a>
             &middot; <a href="https://github.com/anildash/dashtouch/blob/main/docs/troubleshooting.md" target="_blank" rel="noopener">Troubleshooting guide</a>

@@ -166,6 +166,45 @@ function updateSlotList(s) {
   }
 }
 
+// -- checkup: setup health rows from /api/status, each with a "how to fix" --
+// link into the symptom-keyed Help entry below when it's not ok.
+function updateCheckup(s) {
+  const rows = s.health || [];
+  const ul = document.getElementById("checkup");
+  ul.innerHTML = "";
+  let failing = false;
+
+  for (const row of rows) {
+    if (row.ok === false) failing = true;
+
+    const li = document.createElement("li");
+    li.className = "checkup-row";
+
+    const dot = document.createElement("span");
+    dot.className = "dot " + (row.ok === true ? "dot--green"
+                              : row.ok === false ? "dot--red"
+                              : "dot--muted");
+    li.appendChild(dot);
+
+    const text = document.createElement("span");
+    text.className = "checkup-text";
+    text.textContent = `${row.label} — ${row.detail}`;
+    li.appendChild(text);
+
+    if (row.ok === false) {
+      const fix = document.createElement("a");
+      fix.className = "checkup-fix";
+      fix.href = `#${row.fix}`;
+      fix.textContent = "How to fix";
+      li.appendChild(fix);
+    }
+
+    ul.appendChild(li);
+  }
+
+  document.getElementById("health-summary").hidden = !failing;
+}
+
 async function refresh() {
   const r = await fetch("/api/status");
   const s = await r.json();
@@ -180,6 +219,7 @@ async function refresh() {
   document.getElementById("capline").textContent = s.cap ? `${s.cap} finger slots` : "";
 
   updateRing(s);
+  updateCheckup(s);
 
   if (enrolling && s.enroll_stage) {
     const nice = {
