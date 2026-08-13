@@ -14,3 +14,7 @@ reference/
 # Local agent tooling state -- machine-specific, not shared
 .claude/settings.local.json
 .claude/worktrees/
+
+__pycache__/
+*.egg-info/
+.pytest_cache/

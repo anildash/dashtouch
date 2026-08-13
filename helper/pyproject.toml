@@ -1,0 +1,16 @@
+[project]
+name = "dashtouch-helper"
+version = "0.1.0"
+description = "The Mac-side half of Dashboard Touch"
+requires-python = ">=3.10"
+dependencies = ["pyserial>=3.5", "cryptography>=42"]
+
+[project.scripts]
+dashtouch = "dashtouch_helper.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["dashtouch_helper*"]

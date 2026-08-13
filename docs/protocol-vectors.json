@@ -1,0 +1,13 @@
+{
+  "pairing_key": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "nonce": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+  "counter": 7,
+  "slot": 3,
+  "score": 142,
+  "ev_line": "EV a0a1a2a3a4a5a6a7a8a9aaabacadaeaf 7 3 142 889a9e37c41eee045d2e9cd61b8c26c6523638704b1d93a1127ac82f72cf6a1d",
+  "hmac": "889a9e37c41eee045d2e9cd61b8c26c6523638704b1d93a1127ac82f72cf6a1d",
+  "response_key": "0670110579815e17d1655f7bd4457cae90348f6d92d1013308d31d8724533e93",
+  "gcm_nonce": "c0c1c2c3c4c5c6c7c8c9cacb",
+  "password": "hunter2",
+  "pw_line": "PW c0c1c2c3c4c5c6c7c8c9cacb f9d4c3493c804652af6524b49f0e7c39065c23b08e26e3"
+}
