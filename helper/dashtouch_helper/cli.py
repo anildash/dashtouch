@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import getpass
-import os
 import pathlib
 import secrets as pysecrets
 import shutil
@@ -13,7 +12,7 @@ import sys
 import webbrowser
 
 from . import daemon as daemon_mod
-from . import keychain, serial_link
+from . import keychain, serial_link, webui
 
 REPO = pathlib.Path(__file__).parents[2]
 SECRETS_PATH = REPO / "firmware" / "dashtouch" / "secrets.h"
@@ -64,11 +63,16 @@ def cmd_setup(args) -> int:
     if port and shutil.which("arduino-cli"):
         ans = input(f"4. Found your board at {port}. Flash the firmware now? [Y/n] ")
         if ans.strip().lower() in ("", "y", "yes"):
-            subprocess.run(["arduino-cli", "compile", "--fqbn", FQBN,
-                            str(REPO / "firmware" / "dashtouch")], check=True)
-            subprocess.run(["arduino-cli", "upload", "--fqbn", FQBN, "-p", port,
-                            str(REPO / "firmware" / "dashtouch")], check=True)
-            print("   Flashed. Watch for the steady purple ring.")
+            try:
+                subprocess.run(["arduino-cli", "compile", "--fqbn", FQBN,
+                                str(REPO / "firmware" / "dashtouch")], check=True)
+                subprocess.run(["arduino-cli", "upload", "--fqbn", FQBN, "-p", port,
+                                str(REPO / "firmware" / "dashtouch")], check=True)
+                print("   Flashed. Watch for the steady purple ring.")
+            except subprocess.CalledProcessError:
+                print("   That didn't work — the full error is above. Fix and re-run")
+                print("   ./setup; it picks up where it left off.")
+                return 1
     else:
         print("4. (No board or no arduino-cli found — flash later with the")
         print("   commands in the README.)")
@@ -84,9 +88,17 @@ def cmd_run(args) -> int:
 
 
 def cmd_enroll(args) -> int:
-    print("Opening the enrollment page. If nothing opens, start the helper")
-    print("first (`dashtouch run`) and use the URL it prints.")
-    webbrowser.open("http://127.0.0.1:8737/")
+    try:
+        url = webui.URL_PATH.read_text().strip()
+    except FileNotFoundError:
+        url = None
+
+    if not url:
+        print("The helper isn't running yet — start it with `dashtouch run`, then")
+        print("try again (or just open the link it prints).")
+        return 1
+
+    webbrowser.open(url)
     return 0
 
 
@@ -116,10 +128,14 @@ def cmd_install_agent(args) -> int:
     PLIST_PATH.write_text(render_plist(sys.executable, str(REPO)))
     subprocess.run(["launchctl", "unload", str(PLIST_PATH)],
                    capture_output=True)
-    subprocess.run(["launchctl", "load", str(PLIST_PATH)], check=True)
-    print(f"Installed and started. It now runs whenever you're logged in.")
-    print(f"Logs: /tmp/dashtouch-helper.log")
-    return 0
+    try:
+        subprocess.run(["launchctl", "load", str(PLIST_PATH)], check=True)
+        print(f"Installed and started. It now runs whenever you're logged in.")
+        print(f"Logs: /tmp/dashtouch-helper.log")
+        return 0
+    except subprocess.CalledProcessError:
+        print("launchctl refused — try `launchctl unload` first, then re-run.")
+        return 1
 
 
 def main() -> None:

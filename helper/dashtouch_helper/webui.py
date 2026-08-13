@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 WEB_ROOT = pathlib.Path(__file__).parents[1] / "web"
 LABELS_PATH = pathlib.Path.home() / ".dashtouch" / "labels.json"
+URL_PATH = pathlib.Path.home() / ".dashtouch" / "webui-url"
 
 _TOKEN = secrets.token_urlsafe(24)
 _labels_lock = threading.Lock()
@@ -104,4 +105,8 @@ def start(daemon, port: int = 8737) -> str:
     server = ThreadingHTTPServer(("127.0.0.1", port), _make_handler(daemon))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     actual = server.server_address[1]
-    return f"http://127.0.0.1:{actual}/?token={_TOKEN}"
+    url = f"http://127.0.0.1:{actual}/?token={_TOKEN}"
+    URL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    URL_PATH.write_text(url + "\n")
+    URL_PATH.chmod(0o600)
+    return url

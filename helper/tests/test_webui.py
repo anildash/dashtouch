@@ -81,3 +81,11 @@ def test_non_object_json_body_returns_400():
     c.request("POST", "/api/enroll", "[1,2,3]", {"Content-Type": "application/json", "X-DT-Token": token})
     assert c.getresponse().status == 400
     assert d.sent == []
+
+
+def test_start_persists_tokened_url(tmp_path, monkeypatch):
+    monkeypatch.setattr(webui, "URL_PATH", tmp_path / "webui-url")
+    d = FakeDaemon()
+    url = webui.start(d, port=0)
+    assert (tmp_path / "webui-url").read_text().strip() == url
+    assert "token=" in url
