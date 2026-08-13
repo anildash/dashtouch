@@ -30,9 +30,16 @@ async function refresh() {
     const del = document.createElement("button");
     del.textContent = "Remove";
     del.onclick = async () => {
-      await fetch("/api/delete", {method: "POST",
-        headers: {"Content-Type": "application/json", "X-DT-Token": token},
-        body: JSON.stringify({slot: Number(slot)})});
+      try {
+        const response = await fetch("/api/delete", {method: "POST",
+          headers: {"Content-Type": "application/json", "X-DT-Token": token},
+          body: JSON.stringify({slot: Number(slot)})});
+        if (!response.ok) {
+          document.getElementById("progress").textContent = "That didn't go through — this page has probably gone stale. Close this tab and open the fresh link from the helper (or run .venv/bin/dashtouch enroll).";
+        }
+      } catch {
+        document.getElementById("progress").textContent = "Can't reach the helper — is it still running?";
+      }
     };
     li.appendChild(del);
     ul.appendChild(li);
@@ -43,9 +50,16 @@ document.getElementById("enroll").onclick = async () => {
   const slot = Number(document.getElementById("slot").value);
   const label = document.getElementById("label").value;
   document.getElementById("progress").textContent = "Starting…";
-  await fetch("/api/enroll", {method: "POST",
-    headers: {"Content-Type": "application/json", "X-DT-Token": token},
-    body: JSON.stringify({slot, label})});
+  try {
+    const response = await fetch("/api/enroll", {method: "POST",
+      headers: {"Content-Type": "application/json", "X-DT-Token": token},
+      body: JSON.stringify({slot, label})});
+    if (!response.ok) {
+      document.getElementById("progress").textContent = "That didn't go through — this page has probably gone stale. Close this tab and open the fresh link from the helper (or run .venv/bin/dashtouch enroll).";
+    }
+  } catch {
+    document.getElementById("progress").textContent = "Can't reach the helper — is it still running?";
+  }
 };
 
 setInterval(refresh, 800);
