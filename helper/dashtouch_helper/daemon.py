@@ -10,6 +10,7 @@ import threading
 import time
 
 from . import keychain, protocol, serial_link
+from . import webui
 
 DEFAULT_SERIAL = "68EE8F6E7390"
 
@@ -76,6 +77,8 @@ class Daemon:
                     self._ser = None
 
     def run_forever(self) -> None:
+        url = webui.start(self)
+        print(f"web UI: {url}")
         while True:
             port = self.port or serial_link.find_port()
             if port is None:

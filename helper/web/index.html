@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard Touch</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <h1>Dashboard Touch</h1>
+    <section id="status-card">
+      <h2>Your device</h2>
+      <p id="conn">Checking…</p>
+      <p id="sensorline"></p>
+    </section>
+
+    <section>
+      <h2>Your fingers</h2>
+      <p class="hint">Each fingerprint lives in its own numbered slot on the
+      sensor itself — your Mac never sees the prints. Pick a slot, give it a
+      name you'll recognize, and follow the ring.</p>
+      <div id="enroll-form">
+        <label>Slot <input id="slot" type="number" min="1" max="200" value="1"></label>
+        <label>Name <input id="label" type="text" placeholder="right index"></label>
+        <button id="enroll">Add this finger</button>
+      </div>
+      <p id="progress"></p>
+      <ul id="slots"></ul>
+    </section>
+
+    <section>
+      <h2>If something's off</h2>
+      <ul class="help">
+        <li><strong>Ring never turns purple?</strong> The sensor isn't talking.
+        Check all six wires — especially the white one. It's the one everyone
+        skips, and without it the sensor can hear but can't speak.</li>
+        <li><strong>Ring turned yellow?</strong> The device matched your finger
+        but couldn't reach your Mac. Make sure the helper is running.</li>
+        <li><strong>Nothing on this page?</strong> The helper serves this page;
+        if it stopped, so did this.</li>
+      </ul>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
