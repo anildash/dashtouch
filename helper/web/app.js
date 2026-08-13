@@ -20,13 +20,8 @@ let lastSeq = null;
 let flashCls = null;
 let flashStartedAt = 0;
 
-function flashOrSettle(seq, cls, label) {
+function flashOrSettle(cls, label) {
   const now = Date.now();
-  if (lastSeq !== seq) {
-    lastSeq = seq;
-    flashCls = cls;
-    flashStartedAt = now;
-  }
   if (now - flashStartedAt < FLASH_MS) return {cls: flashCls, label};
   return {cls: "ring--idle", label: "Ready"};
 }
@@ -43,8 +38,14 @@ function computeRingState(s) {
   if (stage === "ENROLL_WAIT_FINGER_2") return {cls: "ring--reading", label: "Same finger again…"};
   if (stage.startsWith("ENROLL_OK") || stage.startsWith("ENROLL_FAIL")) {
     const ok = stage.startsWith("ENROLL_OK");
-    const settled = flashOrSettle(s.event_seq, ok ? "ring--match" : "ring--fail",
-                                  ok ? "That's a match" : "Didn't recognize that");
+    // On first poll (lastSeq === null), don't flash enrollment completion — just show the state.
+    if (lastSeq !== null && s.event_seq > lastSeq) {
+      const now = Date.now();
+      flashCls = ok ? "ring--match" : "ring--fail";
+      flashStartedAt = now;
+    }
+    const settled = flashOrSettle(stage.startsWith("ENROLL_OK") ? "ring--match" : "ring--fail",
+                                  stage.startsWith("ENROLL_OK") ? "That's a match" : "Didn't recognize that");
     if (settled.cls !== "ring--idle") return settled;
     // The flash already ran its course — this enrollment episode is over.
     // Fall through so ordinary touches keep lighting up the ring.
@@ -52,10 +53,41 @@ function computeRingState(s) {
 
   const line = s.last_line || "";
   if (line === "TOUCH") return {cls: "ring--reading", label: "Reading…"};
-  if (line === "TYPED") return flashOrSettle(s.event_seq, "ring--match", "That's a match");
-  if (line === "NO_MATCH") return flashOrSettle(s.event_seq, "ring--nomatch", "Didn't recognize that");
+  if (line === "TYPED") {
+    // On first poll, don't flash — just initialize sequence and render steady state.
+    if (lastSeq === null) {
+      lastSeq = s.event_seq;
+      return {cls: "ring--idle", label: "Ready"};
+    }
+    if (s.event_seq > lastSeq) {
+      lastSeq = s.event_seq;
+      const now = Date.now();
+      flashCls = "ring--match";
+      flashStartedAt = now;
+    }
+    return flashOrSettle("ring--match", "That's a match");
+  }
+  if (line === "NO_MATCH") {
+    // On first poll, don't flash — just initialize sequence and render steady state.
+    if (lastSeq === null) {
+      lastSeq = s.event_seq;
+      return {cls: "ring--idle", label: "Ready"};
+    }
+    if (s.event_seq > lastSeq) {
+      lastSeq = s.event_seq;
+      const now = Date.now();
+      flashCls = "ring--nomatch";
+      flashStartedAt = now;
+    }
+    return flashOrSettle("ring--nomatch", "Didn't recognize that");
+  }
   if (line === "ERR helper_timeout" || line === "ERR bad_response") {
     return {cls: "ring--helper", label: "Can't reach your Mac"};
+  }
+
+  // Initialize sequence on first poll if we haven't yet
+  if (lastSeq === null) {
+    lastSeq = s.event_seq;
   }
 
   return {cls: "ring--idle", label: "Ready"};
