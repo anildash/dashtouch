@@ -28,10 +28,9 @@ appears.
   enumerated honestly in `security.md`, in plain language, before anyone
   spends money.
 
-Fork lineage: Dashboard Touch is an extensive refactor of tinyTouch,
-credited by name in the README (no upstream URL exists anywhere in this
-repo — link it there if one is confirmed). MIT license carries over. Repo
-remains `anildash/dashtouch`.
+Fork lineage: Dashboard Touch is an extensive refactor of
+[tinyTouch](https://github.com/ZimengXiong/tinyTouch), credited in the
+README. MIT license carries over. Repo remains `anildash/dashtouch`.
 
 ## 2. Decisions of record
 

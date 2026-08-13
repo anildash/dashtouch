@@ -159,6 +159,19 @@ ef01 ffffffff 07 0013 00  0004 0000 00c8 0003 ffffffff 0002 0006  04ed
 
 `cap=0x00c8` = 200 templates (matches genuine GROW R503), `baud=6` = 57600.
 
+## `fp_colors` — "what does this unit's ring actually support?"
+
+R503-class clones vary; many listings advertise only a "2-color ring," and
+spec-defined colors may render wrong or identical on a given unit. This
+sketch loops a fixed, self-describing sequence — 7 colors at 3s each (red,
+blue, purple, green, yellow, cyan, white), then breathing / flashing /
+fade-in / fade-out on blue — with dark gaps as delimiters, so no serial
+monitor is needed. Run it once on any new unit and define the firmware's
+LED language only from what renders distinctly.
+
+(The unit in this build passed all 7 colors and all 4 animated modes,
+despite its listing advertising two colors.)
+
 ## `fp_boot_listen` — "did the sensor ever transmit?"
 
 The R5xx family emits a `0x55` handshake byte within milliseconds of getting
