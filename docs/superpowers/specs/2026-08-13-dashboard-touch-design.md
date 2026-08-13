@@ -119,8 +119,37 @@ plus `ENROLLING` entered via serial command from the helper.
 **LED behavior — transitions only.** Aura commands fire on state changes,
 never per poll iteration; redundant commands are suppressed. Idle is a
 steady purple with no flicker (the inherited firmware strobed purple/white
-while polling; that behavior is explicitly not carried forward). Language:
-purple = ready, white = reading, green = match, red = no match/error.
+while polling; that behavior is explicitly not carried forward).
+
+**The LED language** (defined against this unit's verified palette — all 7
+colors and all 4 animated modes render; other units should be surveyed with
+`fp_colors` before trusting the full palette). Organizing logic: **red =
+device-side problem, yellow = Mac-side problem**; red appears nowhere else.
+
+| State | Ring |
+| --- | --- |
+| Idle, ready | Steady purple |
+| Reading a finger | Steady white |
+| Match / typed | Green flash ×2 → idle |
+| No match | Red flash ×2 → idle |
+| Helper unreachable (match event unanswered) | Steady yellow, cleared on next successful helper exchange |
+| Enroll: place finger | Breathing white |
+| Enroll: lift finger | Steady cyan |
+| Enroll: place same finger again | Breathing white |
+| Enroll: success | Green flash ×3 |
+| Enroll: fail | Red flash ×3 |
+| Sensor unreachable at boot | See below — the ring cannot be assumed reachable |
+
+**Boot failure is signaled honestly.** The ring is on the sensor, driven
+over the same UART that just failed — failure cannot be painted on hardware
+the firmware can't reach. Three layers: (1) the firmware attempts steady
+red anyway, which costs nothing and genuinely works in the most common
+stranding failure (3.3VT unwired: the sensor receives but cannot reply);
+(2) the documented diagnostic signal is the *absence of purple* — "if the
+ring never turns purple, the sensor isn't talking"; (3) the QT Py's onboard
+NeoPixel, which the sensor cannot take down, is normally off and turns
+steady red when the sensor is unreachable, and the web UI Status page states
+the condition in words.
 
 **Pin defaults follow the silkscreen.** Transmit on GPIO 5 (pad `TX`),
 receive on GPIO 16 (pad `RX`); sensor yellow→`RX`, brown→`TX` — the standard
