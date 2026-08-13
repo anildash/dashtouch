@@ -74,11 +74,12 @@ def cmd_setup(args) -> int:
                 print("   ./setup; it picks up where it left off.")
                 return 1
     else:
-        print("4. (No board or no arduino-cli found — flash later with the")
-        print("   commands in the README.)")
+        print("4. (Hmm — no board found. Plug it in over USB and run ./setup")
+        print("   again; it's safe to re-run. Or flash by hand with the commands")
+        print("   in the README.)")
 
-    print("\nAll set. Run `dashtouch run`, then `dashtouch enroll` to add")
-    print("your first finger.")
+    print("\nAll set. Run `.venv/bin/dashtouch run`, then `.venv/bin/dashtouch enroll`")
+    print("to add your first finger.")
     return 0
 
 

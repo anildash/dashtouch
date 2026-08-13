@@ -62,9 +62,19 @@ your password into the Mac's Keychain (never anywhere else), and flashes
 the firmware onto the board. Then:
 
 ```sh
-dashtouch run      # start the helper
-dashtouch enroll   # opens your browser — add a finger
+.venv/bin/dashtouch run      # start the helper
+.venv/bin/dashtouch enroll   # opens your browser — add a finger
 ```
+
+<details><summary>Flashing by hand (if setup couldn't see your board)</summary>
+
+```sh
+arduino-cli compile --fqbn esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default firmware/dashtouch
+arduino-cli upload --fqbn esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default -p /dev/cu.usbmodemXXX firmware/dashtouch
+```
+
+(`arduino-cli board list` shows your port.)
+</details>
 
 Follow the ring: **breathing white** means place your finger, **cyan**
 means lift, green flashes mean you're in. From then on, purple means
@@ -73,7 +83,7 @@ ready — touch the ring, watch your password appear.
 Want it running all the time without a terminal open?
 
 ```sh
-dashtouch install-agent
+.venv/bin/dashtouch install-agent
 ```
 
 ## The ring, decoded
@@ -90,7 +100,7 @@ dashtouch install-agent
 
 ## Something not working?
 
-Run `dashtouch doctor` for a quick check-up, or read
+Run `.venv/bin/dashtouch doctor` for a quick check-up, or read
 [docs/troubleshooting.md](docs/troubleshooting.md) — every dead end in
 there is one this project personally drove into so you don't have to.
 
