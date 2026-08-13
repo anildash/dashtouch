@@ -98,7 +98,10 @@ bool linkDecryptPw(const char* line, char* pwOut, size_t pwLen) {
 
   memset(key, 0, sizeof(key));
   s_evPending = false;  // one shot, success or fail
-  if (rc != 0) return false;
+  if (rc != 0) {
+    memset(pwOut, 0, pwLen);  // Unauthenticated plaintext must never survive
+    return false;
+  }
   pwOut[ptLen] = 0;
   return true;
 }
