@@ -277,10 +277,10 @@ spec"). Everything before that is upstream tinyTouch.
 **Written by this build:**
 
 ```
-docs/superpowers/specs/2026-08-03-hardware-build-design.md   design + enclosure
-docs/superpowers/plans/2026-08-03-tinytouch-hardware-build.md build plan
-docs/superpowers/references/r503-reference.md                prior art, driver libs
-docs/superpowers/references/2026-08-12-qtpy-uart-fault.md    UART fault investigation
+docs/history/2026-08-03-hardware-build-design.md   design + enclosure
+docs/history/2026-08-03-tinytouch-hardware-build.md build plan
+docs/history/r503-reference.md                prior art, driver libs
+docs/history/2026-08-12-qtpy-uart-fault.md    UART fault investigation
 firmware/diagnostics/                                        6 sketches + capture.py
 software/macos-helper/tinytouch_enroll.py                    enrollment (not upstream)
 ```
@@ -322,7 +322,7 @@ Per-machine, not in git:
 - Keychain entries — `--set-pairing-key` and `--set-password`. **Run
   `--set-password` yourself**; it takes the real login password as an argument.
 - `reference/` — ~16MB of cloned prior-art repos, gitignored. Re-clone per
-  `docs/superpowers/references/r503-reference.md`.
+  `docs/history/r503-reference.md`.
 
 Verify with `--self-test`, then flash and look for a **purple ring**
 (= `READY`, sensor handshake passed). Red = `ERR fingerprint_verify`.

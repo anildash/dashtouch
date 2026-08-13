@@ -76,7 +76,7 @@ neither could ever have replied.
 
 Full investigation record, including the reusable test plan and every
 hypothesis ruled in or out:
-`docs/superpowers/references/2026-08-12-qtpy-uart-fault.md`.
+`docs/history/2026-08-12-qtpy-uart-fault.md`.
 
 **Also done 2026-08-12:** toolchain rebuilt on a second machine (`arduino-cli`
 + `esp32:esp32@3.3.11`); both sketches compile clean; observed R503 wire
@@ -106,7 +106,7 @@ themselves are per-machine, so `--set-pairing-key` and `--set-password` must
 be re-run there (and the same pairing key written into `secrets.h`).
 
 `reference/` is gitignored (~16MB of cloned repos) — re-clone with the
-commands in `docs/superpowers/references/r503-reference.md`.
+commands in `docs/history/r503-reference.md`.
 
 **See also:** that same reference doc for driver libraries, prior-art
 projects, and gotchas; `firmware/diagnostics/` for the two bring-up sketches

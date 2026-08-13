@@ -1,0 +1,38 @@
+#!/bin/bash
+# Dashboard Touch first-run setup. Safe to re-run any time.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+say() { printf "\n\033[1m%s\033[0m\n" "$*"; }
+
+say "Hi! Setting up Dashboard Touch."
+
+if ! command -v python3 >/dev/null; then
+  echo "Python 3 isn't installed. Install the Xcode command line tools"
+  echo "first:  xcode-select --install"
+  exit 1
+fi
+
+if [ ! -d .venv ]; then
+  say "Making a private Python sandbox (.venv) so we don't touch your system."
+  python3 -m venv .venv
+fi
+.venv/bin/pip install -q -e helper
+
+if ! command -v arduino-cli >/dev/null; then
+  say "One missing piece: arduino-cli (it flashes the firmware)."
+  echo "Install it with:  brew install arduino-cli"
+  echo "Then re-run ./setup — it picks up right where it left off."
+  exit 1
+fi
+
+if ! arduino-cli core list 2>/dev/null | grep -q "esp32:esp32"; then
+  say "Teaching arduino-cli about the QT Py (one-time, ~2 minutes)."
+  arduino-cli config init --overwrite >/dev/null
+  arduino-cli config set board_manager.additional_urls \
+    https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+  arduino-cli core update-index
+  arduino-cli core install esp32:esp32
+fi
+
+exec .venv/bin/dashtouch setup

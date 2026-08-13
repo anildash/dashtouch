@@ -112,7 +112,7 @@ baud=57600   rx=5  tx=16  sent=8 received=8    bytes=ef01a55a00ff427e
 GPIO 5 receives fine and drives fine at DC; it just won't carry UART TX. Root
 cause is unconfirmed — a reflow of the joint changed nothing, which disproved
 the cold-joint theory. Full record in
-`docs/superpowers/references/2026-08-12-qtpy-uart-fault.md`.
+`docs/history/2026-08-12-qtpy-uart-fault.md`.
 
 **The build routes around it by transmitting on GPIO 16 and receiving on
 GPIO 5**, i.e. backwards relative to the silkscreen:
@@ -266,7 +266,7 @@ changes are needed to switch sensors, only the wiring above.
 > receives a command cannot reply, so "never produced a valid response" is
 > fully explained by the board fault and does **not** establish that this part
 > was defective. See
-> `docs/superpowers/references/2026-08-12-qtpy-uart-fault.md`.
+> `docs/history/2026-08-12-qtpy-uart-fault.md`.
 >
 > The one observation not explained by the board fault is the measured 2.08V
 > idle on the ZW111's TX line, against the ESP32's ~2.48V logic-high
@@ -331,7 +331,7 @@ worth measuring early rather than after exhausting the wiring hypotheses.
 Diagnostic sketches from this postmortem (`fp_sweep.ino`, a baud/orientation
 brute-forcer built on the official library, and `fp_led.ino`, an LED-only
 probe that tests the host→sensor direction in isolation) are described in
-`docs/superpowers/references/r503-reference.md`.
+`docs/history/r503-reference.md`.
 Given the exhaustive elimination of every other explanation, and that this
 was a $8.99 unit from a low-review-count listing (one of its four reviews
 independently reported "absolutely unusable" out of the box), the sensor was

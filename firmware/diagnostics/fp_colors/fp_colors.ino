@@ -19,7 +19,7 @@
 #include <Arduino.h>
 
 static const int FP_RX_PIN = 5;   // pad labeled "TX" -- this build's board, see
-static const int FP_TX_PIN = 16;  // docs/superpowers/references/2026-08-12-qtpy-uart-fault.md
+static const int FP_TX_PIN = 16;  // docs/history/2026-08-12-qtpy-uart-fault.md
 
 HardwareSerial Finger(1);
 

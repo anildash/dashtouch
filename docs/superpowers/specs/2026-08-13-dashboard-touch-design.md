@@ -47,7 +47,7 @@ README. MIT license carries over. Repo remains `anildash/dashtouch`.
 
 ## 3. Base assumptions, re-founded
 
-The checkpoint (`docs/checkpoint-2026-08-13.md` §5) enumerated every
+The checkpoint (`docs/history/checkpoint-2026-08-13.md` §5) enumerated every
 inherited tinyTouch assumption. Their dispositions:
 
 | Inherited assumption | Dashboard Touch disposition |
