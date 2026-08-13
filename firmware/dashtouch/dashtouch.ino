@@ -5,6 +5,7 @@
 #include "config.h"
 #include "r503.h"
 #include "led.h"
+#include "link.h"
 
 HardwareSerial FingerSerial(1);
 R503 Sensor;
@@ -34,6 +35,23 @@ void setup() {
   Serial.flush();
 }
 
+static String s_cmdBuf;
+
+void pollSerialCommands() {
+  while (Serial.available()) {
+    char c = (char)Serial.read();
+    if (c == '\n') {
+      String line = s_cmdBuf;
+      s_cmdBuf = "";
+      line.trim();
+      linkHandleCommand(line);
+    } else if (c != '\r') {
+      s_cmdBuf += c;
+    }
+  }
+}
+
 void loop() {
-  delay(50);  // state machine lands in Task 5
+  pollSerialCommands();
+  delay(20);  // match/enroll states land in Task 5
 }
