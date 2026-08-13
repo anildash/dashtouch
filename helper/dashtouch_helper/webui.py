@@ -75,7 +75,7 @@ def _make_handler(daemon):
                 n = int(self.headers.get("Content-Length", 0))
                 body = json.loads(self.rfile.read(n) or b"{}")
                 slot = int(body.get("slot", 0))
-            except (ValueError, json.JSONDecodeError):
+            except (ValueError, json.JSONDecodeError, AttributeError):
                 self._json(400, {"error": "bad request"})
                 return
             if not (1 <= slot <= 200):

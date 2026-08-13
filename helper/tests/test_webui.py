@@ -73,3 +73,11 @@ def test_malformed_body_returns_400():
     c.request("POST", "/api/enroll", "not json{{{", {"Content-Type": "application/json", "X-DT-Token": token})
     assert c.getresponse().status == 400
     assert d.sent == []
+
+
+def test_non_object_json_body_returns_400():
+    d, host, port, token = start()
+    c = http.client.HTTPConnection(host, port, timeout=3)
+    c.request("POST", "/api/enroll", "[1,2,3]", {"Content-Type": "application/json", "X-DT-Token": token})
+    assert c.getresponse().status == 400
+    assert d.sent == []
