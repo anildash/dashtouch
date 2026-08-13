@@ -8,7 +8,8 @@ fingerprint touch types the real macOS password — before any enclosure work
 begins.
 
 **Status as of 2026-08-11 — read this first when picking up on another
-machine.**
+machine.** (Superseded in part by the 2026-08-12 update below; the pin
+mapping bullet in particular is no longer the whole story.)
 
 Everything except the sensor is done and verified:
 
@@ -23,10 +24,34 @@ Everything except the sensor is done and verified:
   hold the same pairing key as the Keychain; `--self-test` passes. The whole
   crypto path is proven without the sensor.
 
-**Blocked on:** the replacement sensor, an R503-compatible module (Amazon
-ASIN B08HM8QDVW), in transit. The first sensor (a ZW111) was diagnosed
-defective — it received commands fine but never transmitted; see the design
-spec's "ZW111 unit found defective" section.
+**Update 2026-08-12 — the blocker was never the sensor.**
+
+The R503 arrived and was wired up. It was silent on all 14 sweep
+combinations, identically to the ZW111. A board-only UART loopback test then
+found that **the QT Py pad labeled `TX` (GPIO 5) cannot carry UART
+transmit** — so no command this project ever sent reached either sensor, and
+neither could ever have replied.
+
+- The build now transmits on GPIO 16 and receives on GPIO 5, backwards
+  relative to the silkscreen. See the design spec, "GPIO 5 will not transmit
+  on this board."
+- The R503 has **not** been shown to be faulty; it has never had a fair test.
+- The ZW111 "defective" verdict is no longer trustworthy for the same reason.
+- Root cause of the GPIO 5 fault is still unconfirmed. Reflowing the joint
+  did not change it.
+
+Full investigation record, including the reusable test plan and every
+hypothesis ruled in or out:
+`docs/superpowers/references/2026-08-12-qtpy-uart-fault.md`.
+
+**Also done 2026-08-12:** toolchain rebuilt on a second machine (`arduino-cli`
++ `esp32:esp32@3.3.11`); both sketches compile clean; observed R503 wire
+colors recorded in the spec, replacing a guess that was wrong on four of six;
+`PREFERRED_SERIAL` in the helper corrected from an upstream author's board
+serial to this build's (`68EE8F6E7390`).
+
+**Next:** confirm the R503 responds in the swapped pin configuration, then
+re-verify the connector orientation with a meter (pullup test, see spec).
 
 **Setup needed on a fresh machine:**
 

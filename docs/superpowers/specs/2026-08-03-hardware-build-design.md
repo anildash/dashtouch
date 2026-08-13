@@ -97,6 +97,37 @@ Apply the same remap to `firmware/tiny_touch_smartcard/main/fingerprint.c`
 if the PIV/PAM firmware is ever revisited later — it hardcodes the identical
 three constants.
 
+#### GPIO 5 will not transmit on this board (2026-08-12)
+
+The pin assignment above is correct per the board's variant file, but **the
+physical board in this build cannot carry UART transmit on GPIO 5.** A
+board-only loopback test — one jumper between the `TX` and `RX` pads, no
+sensor attached — is unambiguous:
+
+```
+baud=57600   rx=16 tx=5   sent=8 received=256  bytes=00000000...   (line held low)
+baud=57600   rx=5  tx=16  sent=8 received=8    bytes=ef01a55a00ff427e
+```
+
+GPIO 5 receives fine and drives fine at DC; it just won't carry UART TX. Root
+cause is unconfirmed — a reflow of the joint changed nothing, which disproved
+the cold-joint theory. Full record in
+`docs/superpowers/references/2026-08-12-qtpy-uart-fault.md`.
+
+**The build routes around it by transmitting on GPIO 16 and receiving on
+GPIO 5**, i.e. backwards relative to the silkscreen:
+
+```c
+static const int FP_TX_PIN = 16;  // pad labeled RX -- deliberate
+static const int FP_RX_PIN = 5;   // pad labeled TX -- deliberate
+```
+
+which means the sensor's yellow (TXD) wire lands on the pad labeled `TX` and
+its brown (RXD) wire lands on the pad labeled `RX`. **Do not "correct" this
+to match the labels.** Anyone wiring by the silkscreen will reproduce a total
+communications failure that looks exactly like a dead sensor — which is how
+two sensors came to be wrongly suspected.
+
 ### ZW111 pinout (differs from firmware's 3-wire assumption)
 
 The firmware only wires TX/RX/INT. The ZW111's connector exposes 6
@@ -162,10 +193,10 @@ reuse the ZW111 table above**:
 | --- | --- | --- | --- | --- |
 | 1 | Power Supply | DC 3.3V | `3V` | Red |
 | 2 | GND | Power supply and signal ground | `GND` | Black |
-| 3 | TXD | Data output (module → MCU), TTL logic level | `RX` (GPIO 16) | White |
-| 4 | RXD | Data input (MCU → module), TTL logic level | `TX` (GPIO 5) | Green |
-| 5 | WAKEUP | Finger detection signal | `A3` (GPIO 8) | White |
-| 6 | 3.3VT | Touch induction power supply, DC 3-6V, **must stay powered at all times** (same role as the ZW111's `V_SENSOR`) | `3V` (second wire, same header pin as pin 1) | Red |
+| 3 | TXD | Data output (module → MCU), TTL logic level | `RX` (GPIO 16) | Yellow |
+| 4 | RXD | Data input (MCU → module), TTL logic level | `TX` (GPIO 5) | Brown |
+| 5 | WAKEUP | Finger detection signal | `A3` (GPIO 8) | Blue |
+| 6 | 3.3VT | Touch induction power supply, DC 3-6V, **must stay powered at all times** (same role as the ZW111's `V_SENSOR`) | `3V` (second wire, same header pin as pin 1) | White |
 
 Unlike the ZW111 build, **this sensor ships with its own factory-crimped
 6-wire cable already attached** — there's no hand-wiring or color scheme to
@@ -174,11 +205,37 @@ the connector housing itself is printed with "1" and "6" at either end (per
 the ordered listing's own photo), so match the physical wire order at the
 connector to the pin table above, then wire each into the matching QT Py
 pin per the table (still crossing TX/RX, still landing two wires on the
-single `3V` pin). Confirm the actual factory wire colors once the part is
-in hand and update this table with what's actually observed, rather than
-assuming the ZW111 build's colors carry over — they don't, since that
-scheme was this build's own invention for a hand-built harness, not
+single `3V` pin).
+
+**Wire colors above are now the observed ones**, read off the actual cable on
+2026-08-12 (previously they were a guess, and four of the six were wrong —
+the old table had pins 3 and 5 both as white, which was the tell). The
+observed order matches the colors `linux-fingerprint-r503` reports for its
+own unit exactly (see the R503 reference doc), so this looks like the
+common factory scheme for the family rather than a one-off. The earlier
+guess also assumed the ZW111 build's colors carried over; they don't, since
+that scheme was this build's own invention for a hand-built harness, not
 anything vendor-specified.
+
+**The unit received has no "1"/"6" printed on the housing** — that claim came
+from the Amazon listing's product photo and does not hold for the actual
+part, so there is no printed mark to orient against. Establish pin 1
+electrically instead (all unpowered, no risk):
+
+1. **Pullup test — definitive.** The R503's `RXD` has an internal pullup to
+   `VCC`, so those two pins read a finite few-kΩ between them while every
+   other pair reads open. Measure red↔brown and white↔yellow; exactly one
+   should show that resistance. Red↔brown means red is pin 1.
+2. **Barrel continuity — quick, may not apply.** Probe each wire against the
+   metal barrel. If one reads continuity it is `GND`, which fixes the
+   orientation immediately. If nothing does, the shell is isolated; move on.
+3. **Power confirmation.** With only pin 1 → `3V` and pin 2 → `GND`
+   connected, a correctly-powered module runs its factory idle animation on
+   the aura ring (typically breathing blue). A dark ring means the guess was
+   backwards.
+
+Reading the connector backwards is the failure worth avoiding: it lands GND
+on `A3`, the touch supply on `3V`, and the sensor's `VCC` on the wake pin.
 
 Protocol confirmed directly from the vendor manual, not inferred: `0xEF01`
 2-byte header (high byte first), 4-byte address defaulting to `0xFFFFFFFF`,
@@ -190,6 +247,22 @@ bytes — byte-for-byte identical to the ZW111's protocol and to what
 changes are needed to switch sensors, only the wiring above.
 
 ### ZW111 unit found defective
+
+> **⚠️ This verdict is no longer trustworthy (2026-08-12).** Every test below
+> sent its commands through the QT Py pad labeled `TX` (GPIO 5), which was
+> subsequently found unable to carry UART transmit at all — proven by a
+> board-only loopback test with no sensor attached. A sensor that never
+> receives a command cannot reply, so "never produced a valid response" is
+> fully explained by the board fault and does **not** establish that this part
+> was defective. See
+> `docs/superpowers/references/2026-08-12-qtpy-uart-fault.md`.
+>
+> The one observation not explained by the board fault is the measured 2.08V
+> idle on the ZW111's TX line, against the ESP32's ~2.48V logic-high
+> threshold. That was a direct measurement of the sensor's own output stage
+> and remains suspicious — but it is a single reading and no longer
+> sufficient on its own. Retest this unit in the working pin configuration
+> before trusting the conclusion below.
 
 The originally-received ZW111 unit was extensively debugged and never
 produced a single valid protocol response. Ruled out, each confirmed by

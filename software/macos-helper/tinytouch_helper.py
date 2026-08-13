@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 SERVICE = "tinyTouch"
 ACCOUNT = "tinyTouch"
 PAIRING_SERVICE = "tinyTouch-pairing"
-PREFERRED_SERIAL = "B8F862FB478C"
+PREFERRED_SERIAL = "68EE8F6E7390"
 STATE_PATH = Path.home() / "Library" / "Application Support" / "tinyTouch" / "state.json"
 MAX_SEEN_NONCES = 256
 

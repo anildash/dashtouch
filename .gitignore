@@ -10,3 +10,7 @@ firmware/tiny_touch_smartcard/managed_components/
 
 # Cloned third-party reference code (see docs/superpowers/references/)
 reference/
+
+# Local agent tooling state -- machine-specific, not shared
+.claude/settings.local.json
+.claude/worktrees/
