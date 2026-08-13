@@ -28,11 +28,13 @@ class Daemon:
         self.events: list[dict] = []
         self.state = {"connected": False, "last_line": "", "sensor": "unknown",
                       "fw": "unknown", "enroll_stage": "", "cap": "",
-                      "slots_used": []}
+                      "slots_used": [], "event_seq": 0}
 
     # -- connection lifecycle -----------------------------------------------
     def _on_connect(self) -> None:
-        """New serial session: counter restarts per protocol.md replay rules."""
+        """New serial session: counter restarts per protocol.md replay rules.
+        Event seq is NOT reset — it's monotonic across reconnects so the web page's
+        polling logic remains simple."""
         self._last_counter = 0
         self.state["connected"] = True
         self.send_command("STATUS")
@@ -48,7 +50,16 @@ class Daemon:
 
     # -- pure logic (unit-tested) ------------------------------------
     def handle_line(self, line: str) -> None:
-        self.state["last_line"] = line
+        # Event-type lines: update last_line and bump sequence number.
+        # All other lines (BOOT, INDEX_OK, STATUS_OK, etc.) are logged but don't
+        # update the "latest event" or trigger page re-renders.
+        event_types = ("TOUCH", "TYPED", "NO_MATCH", "ERR ", "ENROLL_", "DELETE_")
+        is_event = line.startswith(event_types)
+
+        if is_event:
+            self.state["last_line"] = line
+            self.state["event_seq"] += 1
+
         if line.startswith("BOOT "):
             self._last_counter = 0
             parts = line.split()

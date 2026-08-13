@@ -14,15 +14,20 @@ const RING_CLASSES = ["ring--idle", "ring--reading", "ring--lift", "ring--match"
   "ring--nomatch", "ring--fail", "ring--helper", "ring--dark", "ring--boot-fail"];
 const FLASH_MS = 1000; // 0.25s steps x 4 iterations
 
-// Tracks the most recent line/stage that triggered a flash, so a poll that
-// sees the same event twice doesn't re-flash it — it settles to idle once
-// and stays there until a genuinely new event arrives.
-let flash = {key: null, cls: null, startedAt: 0};
+// Tracks the most recent event sequence number; when event_seq advances,
+// the new event gets flashed. Resets on page load so the first poll never fires a stale flash.
+let lastSeq = null;
+let flashCls = null;
+let flashStartedAt = 0;
 
-function flashOrSettle(key, cls, label) {
+function flashOrSettle(seq, cls, label) {
   const now = Date.now();
-  if (flash.key !== key) flash = {key, cls, startedAt: now};
-  if (now - flash.startedAt < FLASH_MS) return {cls: flash.cls, label};
+  if (lastSeq !== seq) {
+    lastSeq = seq;
+    flashCls = cls;
+    flashStartedAt = now;
+  }
+  if (now - flashStartedAt < FLASH_MS) return {cls: flashCls, label};
   return {cls: "ring--idle", label: "Ready"};
 }
 
@@ -38,7 +43,7 @@ function computeRingState(s) {
   if (stage === "ENROLL_WAIT_FINGER_2") return {cls: "ring--reading", label: "Same finger again…"};
   if (stage.startsWith("ENROLL_OK") || stage.startsWith("ENROLL_FAIL")) {
     const ok = stage.startsWith("ENROLL_OK");
-    const settled = flashOrSettle(stage, ok ? "ring--match" : "ring--fail",
+    const settled = flashOrSettle(s.event_seq, ok ? "ring--match" : "ring--fail",
                                   ok ? "That's a match" : "Didn't recognize that");
     if (settled.cls !== "ring--idle") return settled;
     // The flash already ran its course — this enrollment episode is over.
@@ -47,8 +52,8 @@ function computeRingState(s) {
 
   const line = s.last_line || "";
   if (line === "TOUCH") return {cls: "ring--reading", label: "Reading…"};
-  if (line === "TYPED") return flashOrSettle(line, "ring--match", "That's a match");
-  if (line === "NO_MATCH") return flashOrSettle(line, "ring--nomatch", "Didn't recognize that");
+  if (line === "TYPED") return flashOrSettle(s.event_seq, "ring--match", "That's a match");
+  if (line === "NO_MATCH") return flashOrSettle(s.event_seq, "ring--nomatch", "Didn't recognize that");
   if (line === "ERR helper_timeout" || line === "ERR bad_response") {
     return {cls: "ring--helper", label: "Can't reach your Mac"};
   }
@@ -77,15 +82,19 @@ function updateSlotSelect(s) {
   lastFreeKey = key;
 
   const select = document.getElementById("slot");
+  const addBtn = document.getElementById("enroll");
   const prev = select.value;
   select.innerHTML = "";
   if (free.length === 0) {
     const opt = document.createElement("option");
-    opt.textContent = "No free slots";
+    opt.value = "";
+    opt.textContent = "All 200 slots are spoken for — remove one first";
     opt.disabled = true;
     select.appendChild(opt);
+    addBtn.disabled = true;
     return;
   }
+  addBtn.disabled = false;
   for (const n of free) {
     const opt = document.createElement("option");
     opt.value = String(n);

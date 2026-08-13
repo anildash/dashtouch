@@ -105,6 +105,13 @@ def test_start_persists_tokened_url(tmp_path, monkeypatch):
     assert "token=" in url
 
 
+def test_enroll_with_null_slot_returns_400():
+    d, host, port, token = start()
+    status, _ = req(host, port, "POST", "/api/enroll", {"slot": None, "label": "x"}, token)
+    assert status == 400
+    assert d.sent == []
+
+
 def test_log_requires_token_then_returns_events():
     d, host, port, token = start()
     status, _ = req(host, port, "GET", "/api/log")

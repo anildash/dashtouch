@@ -112,3 +112,24 @@ def test_enroll_ok_triggers_index_refresh():
     d = make_daemon()
     d.handle_line("ENROLL_OK 3")
     assert d._ser.written[-1] == b"INDEX\n"
+
+
+def test_index_ok_does_not_update_last_line_or_event_seq():
+    d = make_daemon()
+    d.handle_line("TOUCH")
+    initial_seq = d.state["event_seq"]
+    initial_last_line = d.state["last_line"]
+    d.handle_line("INDEX_OK 00" + "00" * 31)
+    assert d.state["last_line"] == initial_last_line
+    assert d.state["event_seq"] == initial_seq
+
+
+def test_event_types_bump_seq():
+    d = make_daemon()
+    assert d.state["event_seq"] == 0
+    d.handle_line("TOUCH")
+    assert d.state["event_seq"] == 1
+    assert d.state["last_line"] == "TOUCH"
+    d.handle_line("TYPED")
+    assert d.state["event_seq"] == 2
+    assert d.state["last_line"] == "TYPED"
