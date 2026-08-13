@@ -40,6 +40,11 @@ int R503::readAck(uint8_t* data, size_t maxLen, size_t* gotLen,
     return R503_TIMEOUT;
   uint16_t plen = ((uint16_t)buf[7] << 8) | buf[8];
 
+  // Bounds check: payload must be at least 3 bytes (confirm + 2 checksum) and fit in captured data
+  size_t avail = n - 9;
+  if (plen < 3 || plen > avail)
+    return R503_TIMEOUT;
+
   // Validate packet checksum; reject corrupted packets
   uint32_t cksum = buf[6] + buf[7] + buf[8];
   for (size_t i = 0; i < plen - 2; i++) {
