@@ -1,7 +1,8 @@
 // Dashboard Touch firmware — see docs/protocol.md for every line this
-// prints or accepts. This file is the state machine; the protocol lives
-// in link.cpp (Task 4) and the sensor driver in r503.cpp.
+// prints or accepts.
 #include <Arduino.h>
+#include <USB.h>
+#include <USBHIDKeyboard.h>
 #include "config.h"
 #include "r503.h"
 #include "led.h"
@@ -9,15 +10,165 @@
 
 HardwareSerial FingerSerial(1);
 R503 Sensor;
+USBHIDKeyboard Keyboard;
+
 bool g_sensorOk = false;
 uint16_t g_capacity = 0;
 
+static String s_cmdBuf;
+static uint32_t s_lastPoll = 0;
+
+// ---------------------------------------------------------------- enroll
+static void doEnroll(uint16_t slot) {
+  ledSet(DT_LED_ENROLL_PLACE);
+  Serial.println("ENROLL_WAIT_FINGER_1");
+  Serial.flush();
+
+  uint32_t deadline = millis() + 15000;
+  while (millis() < deadline && Sensor.genImg() != 0) delay(50);
+  if (Sensor.img2Tz(1) != 0) {
+    Serial.println("ENROLL_FAIL capture1");
+    ledSet(DT_LED_ENROLL_FAIL);
+    delay(DT_RESULT_HOLD_MS);
+    ledSet(DT_LED_IDLE);
+    return;
+  }
+
+  ledSet(DT_LED_ENROLL_LIFT);
+  Serial.println("ENROLL_REMOVE_FINGER");
+  Serial.flush();
+  deadline = millis() + 8000;
+  while (millis() < deadline && Sensor.genImg() == 0) delay(100);
+  delay(300);
+
+  ledSet(DT_LED_ENROLL_PLACE);
+  Serial.println("ENROLL_WAIT_FINGER_2");
+  Serial.flush();
+  deadline = millis() + 15000;
+  while (millis() < deadline && Sensor.genImg() != 0) delay(50);
+  if (Sensor.img2Tz(2) != 0) {
+    Serial.println("ENROLL_FAIL capture2");
+    ledSet(DT_LED_ENROLL_FAIL);
+    delay(DT_RESULT_HOLD_MS);
+    ledSet(DT_LED_IDLE);
+    return;
+  }
+
+  if (Sensor.regModel() != 0) {
+    Serial.println("ENROLL_FAIL regmodel");
+    ledSet(DT_LED_ENROLL_FAIL);
+    delay(DT_RESULT_HOLD_MS);
+    ledSet(DT_LED_IDLE);
+    return;
+  }
+  if (Sensor.storeTemplate(slot) != 0) {
+    Serial.println("ENROLL_FAIL store");
+    ledSet(DT_LED_ENROLL_FAIL);
+    delay(DT_RESULT_HOLD_MS);
+    ledSet(DT_LED_IDLE);
+    return;
+  }
+
+  Serial.printf("ENROLL_OK %u\n", slot);
+  Serial.flush();
+  ledSet(DT_LED_ENROLL_OK);
+  delay(DT_RESULT_HOLD_MS);
+  ledSet(DT_LED_IDLE);
+}
+
+static void doDelete(uint16_t slot) {
+  if (Sensor.deleteTemplate(slot) == 0)
+    Serial.printf("DELETE_OK %u\n", slot);
+  else
+    Serial.printf("DELETE_FAIL %u\n", slot);
+  Serial.flush();
+}
+
+// ----------------------------------------------------------------- match
+// After a match: emit EV, wait up to 3000 ms for a valid PW line, type it.
+static void handleMatch(uint16_t slot, uint16_t score) {
+  char ev[192];
+  linkBuildEv(slot, score, ev, sizeof(ev));
+  Serial.println("TOUCH");
+  Serial.println(ev);
+  Serial.flush();
+
+  char pw[128];
+  bool typed = false;
+  bool answered = false;
+  uint32_t deadline = millis() + 3000;
+  String buf;
+  while (millis() < deadline && !answered) {
+    while (Serial.available()) {
+      char c = (char)Serial.read();
+      if (c == '\n') {
+        buf.trim();
+        if (buf.startsWith("PW ")) {
+          answered = true;
+          if (linkDecryptPw(buf.c_str(), pw, sizeof(pw))) {
+            Keyboard.print(pw);
+#if DT_PRESS_ENTER
+            Keyboard.write('\n');
+#endif
+            memset(pw, 0, sizeof(pw));  // wipe
+            typed = true;
+          }
+        }
+        buf = "";
+      } else if (c != '\r') {
+        buf += c;
+      }
+    }
+    delay(5);
+  }
+
+  if (typed) {
+    Serial.println("TYPED");
+    ledSet(DT_LED_MATCH);
+    delay(DT_RESULT_HOLD_MS);
+    ledSet(DT_LED_IDLE);
+  } else if (answered) {
+    Serial.println("ERR bad_response");
+    ledSet(DT_LED_HELPER_WAIT);  // yellow: the Mac side is the problem
+  } else {
+    Serial.println("ERR helper_timeout");
+    ledSet(DT_LED_HELPER_WAIT);
+  }
+  Serial.flush();
+}
+
+// ---------------------------------------------------------------- serial
+void pollSerialCommands() {
+  while (Serial.available()) {
+    char c = (char)Serial.read();
+    if (c == '\n') {
+      String line = s_cmdBuf;
+      s_cmdBuf = "";
+      line.trim();
+      // Any successful host exchange clears a stale yellow.
+      if (line.length()) ledSet(DT_LED_IDLE);
+      linkHandleCommand(line);
+    } else if (c != '\r') {
+      s_cmdBuf += c;
+    }
+  }
+}
+
+// ------------------------------------------------------------ setup/loop
 void setup() {
   Serial.begin(115200);
+  Keyboard.begin();
+  USB.begin();
   delay(1500);
+
+#if DT_USE_WAKEUP_PIN
+  pinMode(DT_WAKEUP_PIN, INPUT);
+#endif
 
   Sensor.begin(FingerSerial, DT_FP_RX_PIN, DT_FP_TX_PIN, DT_UART_BAUD);
   ledInit(&Sensor);
+  linkOnEnroll = doEnroll;
+  linkOnDelete = doDelete;
 
   Serial.printf("BOOT dashtouch %s proto=1\n", DT_FW_VERSION);
 
@@ -29,29 +180,47 @@ void setup() {
     boardLedRed(false);
   } else {
     Serial.println("ERR sensor_unreachable");
-    ledSet(DT_LED_BOOT_FAIL);  // best effort; ring may be unreachable
-    boardLedRed(true);         // this one the sensor can't take down
+    ledSet(DT_LED_BOOT_FAIL);
+    boardLedRed(true);
   }
   Serial.flush();
 }
 
-static String s_cmdBuf;
-
-void pollSerialCommands() {
-  while (Serial.available()) {
-    char c = (char)Serial.read();
-    if (c == '\n') {
-      String line = s_cmdBuf;
-      s_cmdBuf = "";
-      line.trim();
-      linkHandleCommand(line);
-    } else if (c != '\r') {
-      s_cmdBuf += c;
-    }
-  }
-}
-
 void loop() {
   pollSerialCommands();
-  delay(20);  // match/enroll states land in Task 5
+
+  if (!g_sensorOk || millis() - s_lastPoll < DT_POLL_MS) {
+    delay(5);
+    return;
+  }
+  s_lastPoll = millis();
+
+#if DT_USE_WAKEUP_PIN
+  // Optional: skip the UART round-trip entirely until WAKEUP asserts.
+  if (digitalRead(DT_WAKEUP_PIN) != DT_WAKEUP_ACTIVE) return;
+#endif
+
+  // Silent poll: no LED change unless a finger is actually present.
+  if (Sensor.genImg() != 0) return;
+
+  ledSet(DT_LED_READING);
+  if (Sensor.img2Tz(1) != 0) {
+    ledSet(DT_LED_IDLE);
+    return;
+  }
+
+  uint16_t slot = 0, score = 0;
+  if (Sensor.search(&slot, &score) == 0 && score > 0) {
+    handleMatch(slot, score);
+  } else {
+    Serial.println("NO_MATCH");
+    Serial.flush();
+    ledSet(DT_LED_NOMATCH);
+    delay(DT_RESULT_HOLD_MS);
+    ledSet(DT_LED_IDLE);
+  }
+
+  // Don't re-fire while the finger is still down.
+  uint32_t lifted = millis() + 5000;
+  while (millis() < lifted && Sensor.genImg() == 0) delay(100);
 }
