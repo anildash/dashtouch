@@ -12,6 +12,7 @@ WEB_ROOT = pathlib.Path(__file__).parents[1] / "web"
 LABELS_PATH = pathlib.Path.home() / ".dashtouch" / "labels.json"
 
 _TOKEN = secrets.token_urlsafe(24)
+_labels_lock = threading.Lock()
 
 
 def _load_labels() -> dict:
@@ -67,29 +68,34 @@ def _make_handler(daemon):
                 self.send_error(404)
 
         def do_POST(self):
-            if self.headers.get("X-DT-Token") != _TOKEN:
+            if not secrets.compare_digest(self.headers.get("X-DT-Token") or "", _TOKEN):
                 self._json(403, {"error": "bad token"})
                 return
-            n = int(self.headers.get("Content-Length", 0))
-            body = json.loads(self.rfile.read(n) or b"{}")
-            slot = int(body.get("slot", 0))
+            try:
+                n = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(n) or b"{}")
+                slot = int(body.get("slot", 0))
+            except (ValueError, json.JSONDecodeError):
+                self._json(400, {"error": "bad request"})
+                return
             if not (1 <= slot <= 200):
                 self._json(400, {"error": "slot out of range"})
                 return
-            labels = _load_labels()
-            if self.path == "/api/enroll":
-                labels[str(slot)] = str(body.get("label", ""))[:64]
-                _save_labels(labels)
-                daemon.state["enroll_stage"] = ""
-                daemon.send_command(f"ENROLL {slot}")
-                self._json(202, {"ok": True})
-            elif self.path == "/api/delete":
-                labels.pop(str(slot), None)
-                _save_labels(labels)
-                daemon.send_command(f"DELETE {slot}")
-                self._json(202, {"ok": True})
-            else:
-                self.send_error(404)
+            with _labels_lock:
+                labels = _load_labels()
+                if self.path == "/api/enroll":
+                    labels[str(slot)] = str(body.get("label", ""))[:64]
+                    _save_labels(labels)
+                    daemon.state["enroll_stage"] = ""
+                    daemon.send_command(f"ENROLL {slot}")
+                    self._json(202, {"ok": True})
+                elif self.path == "/api/delete":
+                    labels.pop(str(slot), None)
+                    _save_labels(labels)
+                    daemon.send_command(f"DELETE {slot}")
+                    self._json(202, {"ok": True})
+                else:
+                    self.send_error(404)
 
     return Handler
 

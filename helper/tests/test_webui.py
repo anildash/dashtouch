@@ -65,3 +65,11 @@ def test_delete_with_token(tmp_path, monkeypatch):
     status, _ = req(host, port, "POST", "/api/delete", {"slot": 2}, token)
     assert status == 202
     assert d.sent == ["ENROLL 2", "DELETE 2"]
+
+
+def test_malformed_body_returns_400():
+    d, host, port, token = start()
+    c = http.client.HTTPConnection(host, port, timeout=3)
+    c.request("POST", "/api/enroll", "not json{{{", {"Content-Type": "application/json", "X-DT-Token": token})
+    assert c.getresponse().status == 400
+    assert d.sent == []
