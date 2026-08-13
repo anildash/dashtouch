@@ -65,3 +65,11 @@ def test_enroll_stage_tracked_for_webui():
     assert d.state["enroll_stage"] == "ENROLL_WAIT_FINGER_1"
     d.handle_line("ENROLL_OK 3")
     assert d.state["enroll_stage"] == "ENROLL_OK 3"
+
+
+def test_new_session_resets_counter():
+    d = make_daemon()
+    d._last_counter = 99
+    d._on_connect()
+    assert d._last_counter == 0
+    assert d._ser.written == [b"STATUS\n"]

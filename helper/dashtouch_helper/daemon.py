@@ -26,6 +26,13 @@ class Daemon:
         self.state = {"connected": False, "last_line": "", "sensor": "unknown",
                       "fw": "unknown", "enroll_stage": ""}
 
+    # -- connection lifecycle -----------------------------------------------
+    def _on_connect(self) -> None:
+        """New serial session: counter restarts per protocol.md replay rules."""
+        self._last_counter = 0
+        self.state["connected"] = True
+        self.send_command("STATUS")
+
     # -- pure logic (unit-tested) ------------------------------------
     def handle_line(self, line: str) -> None:
         self.state["last_line"] = line
@@ -62,8 +69,11 @@ class Daemon:
     def send_command(self, line: str) -> None:
         with self._write_lock:
             if self._ser is not None:
-                self._ser.write((line + "\n").encode())
-                self._ser.flush()
+                try:
+                    self._ser.write((line + "\n").encode())
+                    self._ser.flush()
+                except (OSError, serial_link.serial.SerialException):
+                    self._ser = None
 
     def run_forever(self) -> None:
         while True:
@@ -73,17 +83,18 @@ class Daemon:
                 time.sleep(1.0)
                 continue
             try:
-                self._ser = serial_link.open_port(port)
-                self.state["connected"] = True
+                with self._write_lock:
+                    self._ser = serial_link.open_port(port)
                 print(f"helper listening on {port}")
-                self.send_command("STATUS")
+                self._on_connect()
                 while True:
                     line = serial_link.read_line(self._ser)
                     if line is not None:
                         self.handle_line(line)
             except (OSError, serial_link.serial.SerialException):
                 self.state["connected"] = False
-                self._ser = None
+                with self._write_lock:
+                    self._ser = None
                 print("port lost; waiting for the board to come back...")
                 time.sleep(1.0)
 
