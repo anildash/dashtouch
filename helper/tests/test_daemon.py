@@ -72,7 +72,7 @@ def test_new_session_resets_counter():
     d._last_counter = 99
     d._on_connect()
     assert d._last_counter == 0
-    assert d._ser.written == [b"STATUS\n"]
+    assert d._ser.written == [b"STATUS\n", b"INDEX\n"]
 
 
 def test_log_event_caps_at_400():
@@ -97,3 +97,18 @@ def test_send_command_redacts_pw_payload():
     assert len(host_events) == 1
     assert host_events[0]["text"] == "PW <one-time encrypted password, 3 bytes>"
     assert "abc123" not in host_events[0]["text"]
+
+
+def test_index_ok_parses_bitmap_into_slots_used():
+    d = make_daemon()
+    bitmap_hex = "0a" + "00" * 31  # byte 0 = 0b00001010: slots 1 and 3 set
+    d.handle_line(f"INDEX_OK {bitmap_hex}")
+    assert d.state["slots_used"] == [1, 3]
+    assert d.events[-1] == {"t": d.events[-1]["t"], "dir": "device",
+                            "text": f"INDEX_OK {bitmap_hex}"}
+
+
+def test_enroll_ok_triggers_index_refresh():
+    d = make_daemon()
+    d.handle_line("ENROLL_OK 3")
+    assert d._ser.written[-1] == b"INDEX\n"

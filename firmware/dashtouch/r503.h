@@ -15,6 +15,10 @@ class R503 {
   int deleteTemplate(uint16_t slot);
   int search(uint16_t* slot, uint16_t* score);
   int auraCtl(uint8_t mode, uint8_t speed, uint8_t color, uint8_t count);
+  // Reads one 32-byte slot-usage bitmap page (bit i of byte b = slot
+  // b*8+i used, LSB-first). Page 0 covers slots 0-255. Copies exactly 32
+  // payload bytes to out on confirm 0.
+  int readIndexTable(uint8_t page, uint8_t out[32]);
 
  private:
   HardwareSerial* ser_ = nullptr;

@@ -10,7 +10,8 @@ from dashtouch_helper import webui
 class FakeDaemon:
     def __init__(self):
         self.state = {"connected": True, "sensor": "ok", "fw": "dt-0.1.0",
-                      "enroll_stage": "", "last_line": ""}
+                      "enroll_stage": "", "last_line": "", "cap": "200",
+                      "slots_used": [1, 3]}
         self.sent = []
         self.events = []
         self._events_lock = threading.Lock()
@@ -44,6 +45,13 @@ def test_status_needs_no_token():
     d, host, port, token = start()
     status, body = req(host, port, "GET", "/api/status")
     assert status == 200 and body["connected"] is True
+
+
+def test_status_carries_slots_used():
+    d, host, port, token = start()
+    status, body = req(host, port, "GET", "/api/status")
+    assert status == 200
+    assert body["slots_used"] == [1, 3]
 
 
 def test_enroll_without_token_rejected():

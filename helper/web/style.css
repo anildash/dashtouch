@@ -1,18 +1,255 @@
-body { font: 16px/1.5 -apple-system, system-ui, sans-serif;
-       margin: 0; background: #f5f5f7; color: #1d1d1f; }
-main { max-width: 640px; margin: 0 auto; padding: 2rem 1rem; }
-h1 { font-size: 1.6rem; }
-section { background: #fff; border-radius: 12px; padding: 1rem 1.25rem;
-          margin: 1rem 0; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-.hint, .help { color: #6e6e73; }
-input { padding: .35rem .5rem; border: 1px solid #d2d2d7; border-radius: 8px;
-        width: 9rem; }
-button { padding: .45rem .9rem; border: 0; border-radius: 8px;
-         background: #0071e3; color: #fff; cursor: pointer; }
-li button { background: #e8e8ed; color: #1d1d1f; margin-left: .5rem; }
-#progress { font-weight: 600; }
-#log { display: none; margin-top: .75rem; padding: .5rem .75rem;
-       background: #f5f5f7; border-radius: 8px; max-height: 300px;
-       overflow-y: auto; white-space: pre-wrap; word-break: break-all;
-       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-       font-size: .8rem; color: #1d1d1f; }
+:root {
+  --ink: #171519;      /* page ground — under-desk shadow */
+  --panel: #211e26;    /* cards */
+  --line: #35313c;     /* hairlines */
+  --text: #f2eff5;
+  --muted: #9b95a4;
+  --aura-purple: #a06bff;
+  --aura-white: #f5f2ff;
+  --aura-green: #37d67a;
+  --aura-red: #ff4d4d;
+  --aura-yellow: #ffc53d;
+  --aura-cyan: #3fd6d0;
+
+  /* alpha-friendly triplets for glow / tint fills */
+  --aura-purple-rgb: 160, 107, 255;
+  --aura-white-rgb: 245, 242, 255;
+  --aura-green-rgb: 55, 214, 122;
+  --aura-red-rgb: 255, 77, 77;
+  --aura-yellow-rgb: 255, 197, 61;
+  --aura-cyan-rgb: 63, 214, 208;
+
+  --font-heading: "Avenir Next", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--text);
+  font: 16px/1.5 var(--font-body);
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+h1 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 1.5rem;
+  margin: 0 0 1.5rem;
+}
+
+h2 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 1.05rem;
+  margin: 0 0 .75rem;
+}
+
+a { color: var(--aura-cyan); }
+a:hover { opacity: .85; }
+
+:focus-visible {
+  outline: 2px solid var(--aura-purple);
+  outline-offset: 2px;
+}
+
+/* -- missing-token notice ------------------------------------------- */
+.banner {
+  border: 1px solid var(--aura-yellow);
+  background: rgba(var(--aura-yellow-rgb), .08);
+  color: var(--text);
+  border-radius: 10px;
+  padding: .75rem 1rem;
+  margin-bottom: 1.5rem;
+  font-size: .9rem;
+}
+
+/* -- layout ------------------------------------------------------------ */
+.layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+@media (min-width: 760px) {
+  .layout { grid-template-columns: 260px 1fr; }
+  .rail { position: sticky; top: 24px; align-self: start; }
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1.25rem 1.25rem 1.5rem;
+}
+
+.main-col { display: flex; flex-direction: column; gap: 24px; }
+
+.hint { color: var(--muted); font-size: .9rem; }
+
+/* -- the twin ring ------------------------------------------------------ */
+.ring-wrap { text-align: center; margin-bottom: 1rem; }
+
+.ring {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto .75rem;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 10px solid var(--aura-purple);
+  box-shadow: 0 0 24px rgba(var(--aura-purple-rgb), .45);
+  transition: border-color .25s ease, box-shadow .25s ease;
+}
+.ring-label { color: var(--muted); font-size: .9rem; margin: 0; }
+
+.ring--idle {
+  border-color: var(--aura-purple);
+  box-shadow: 0 0 24px rgba(var(--aura-purple-rgb), .45);
+}
+.ring--reading {
+  border-color: var(--aura-white);
+  box-shadow: 0 0 24px rgba(var(--aura-white-rgb), .45);
+  animation: breathe 2.4s ease-in-out infinite;
+}
+.ring--lift {
+  border-color: var(--aura-cyan);
+  box-shadow: 0 0 24px rgba(var(--aura-cyan-rgb), .45);
+}
+.ring--match {
+  border-color: var(--aura-green);
+  box-shadow: 0 0 24px rgba(var(--aura-green-rgb), .45);
+  animation: flash .25s steps(2, jump-none) 4;
+}
+.ring--nomatch, .ring--fail {
+  border-color: var(--aura-red);
+  box-shadow: 0 0 24px rgba(var(--aura-red-rgb), .45);
+  animation: flash .25s steps(2, jump-none) 4;
+}
+.ring--helper {
+  border-color: var(--aura-yellow);
+  box-shadow: 0 0 24px rgba(var(--aura-yellow-rgb), .45);
+}
+.ring--dark {
+  border-color: var(--line);
+  border-style: dashed;
+  box-shadow: none;
+}
+.ring--boot-fail {
+  border-color: var(--aura-red);
+  box-shadow: 0 0 24px rgba(var(--aura-red-rgb), .45);
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
+@keyframes flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .2; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ring { animation: none !important; }
+}
+
+/* -- legend --------------------------------------------------------- */
+.legend {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: .75rem 0 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .8rem;
+}
+.legend li { display: flex; align-items: center; gap: .5rem; padding: .15rem 0; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dot--purple { background: var(--aura-purple); }
+.dot--white { background: var(--aura-white); }
+.dot--green { background: var(--aura-green); }
+.dot--red { background: var(--aura-red); }
+.dot--yellow { background: var(--aura-yellow); }
+.dot--cyan { background: var(--aura-cyan); }
+
+/* -- forms ------------------------------------------------------------ */
+#enroll-form { display: flex; flex-wrap: wrap; gap: .6rem; align-items: flex-end; }
+label { display: flex; flex-direction: column; gap: .3rem; font-size: .8rem; color: var(--muted); }
+input, select {
+  font: inherit;
+  color: var(--text);
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: .45rem .6rem;
+}
+select#slot { font-family: var(--font-mono); }
+button {
+  font: inherit;
+  font-weight: 600;
+  border: 0;
+  border-radius: 8px;
+  padding: .5rem 1rem;
+  background: var(--aura-purple);
+  color: var(--ink);
+  cursor: pointer;
+}
+button:hover { filter: brightness(1.08); }
+
+.remove-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-weight: 500;
+  padding: .3rem .7rem;
+  font-size: .85rem;
+}
+.remove-btn:hover { color: var(--text); filter: none; }
+
+#progress { font-weight: 600; min-height: 1.2em; margin-top: .75rem; }
+
+/* -- enrolled slot list -------------------------------------------------- */
+#slots { list-style: none; margin: .5rem 0 0; padding: 0; }
+#slots li {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .55rem 0;
+  border-top: 1px solid var(--line);
+}
+.slot-num { font-family: var(--font-mono); color: var(--text); }
+#slots li .remove-btn { margin-left: auto; }
+
+/* -- help ------------------------------------------------------------- */
+.help { color: var(--muted); padding-left: 1.1rem; margin: 0; }
+.help li { margin-bottom: .6rem; }
+.help strong { color: var(--text); }
+.help-links { margin: 1rem 0 0; font-size: .9rem; }
+.help-links a { margin: 0 .15rem; }
+
+/* -- debug feed -------------------------------------------------------- */
+#debug-toggle {
+  background: var(--ink);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-weight: 500;
+}
+#log {
+  display: none;
+  margin-top: .75rem;
+  padding: .6rem .75rem;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  color: var(--muted);
+}

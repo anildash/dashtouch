@@ -9,47 +9,75 @@
 <body>
   <main>
     <h1>Dashboard Touch</h1>
-    <section id="status-card">
-      <h2>Your device</h2>
-      <p id="conn">Checking…</p>
-      <p id="sensorline"></p>
-    </section>
+    <div id="banner" class="banner" role="alert" hidden></div>
 
-    <section>
-      <h2>Your fingers</h2>
-      <p class="hint">Each fingerprint lives in its own numbered slot on the
-      sensor itself — your Mac never sees the prints. Pick a slot, give it a
-      name you'll recognize, and follow the ring.</p>
-      <div id="enroll-form">
-        <label>Slot <input id="slot" type="number" min="1" max="200" value="1"></label>
-        <label>Name <input id="label" type="text" placeholder="right index"></label>
-        <button id="enroll">Add this finger</button>
+    <div class="layout">
+      <aside class="rail">
+        <section class="card" id="device-card">
+          <h2>Your device</h2>
+          <div class="ring-wrap">
+            <div class="ring ring--dark" id="ring"></div>
+            <p class="ring-label" id="ring-label">Not connected</p>
+          </div>
+          <p id="conn">Checking&hellip;</p>
+          <p id="sensorline"></p>
+          <p id="capline"></p>
+          <ul class="legend">
+            <li><span class="dot dot--purple"></span> Purple &mdash; ready</li>
+            <li><span class="dot dot--white"></span> White &mdash; reading</li>
+            <li><span class="dot dot--cyan"></span> Cyan &mdash; lift your finger</li>
+            <li><span class="dot dot--green"></span> Green &mdash; matched</li>
+            <li><span class="dot dot--red"></span> Red &mdash; no match, or trouble</li>
+            <li><span class="dot dot--yellow"></span> Yellow &mdash; can't reach your Mac</li>
+          </ul>
+        </section>
+      </aside>
+
+      <div class="main-col">
+        <section class="card" id="fingers-card">
+          <h2>Your fingers</h2>
+          <p class="hint">Each fingerprint lives in its own numbered slot on the
+          sensor itself &mdash; your Mac never sees the prints. Pick a slot, give it
+          a name you'll recognize, and follow the ring.</p>
+          <div id="enroll-form">
+            <label>Slot <select id="slot"></select></label>
+            <label>Name <input id="label" type="text" placeholder="right index"></label>
+            <button id="enroll">Add this finger</button>
+          </div>
+          <p id="progress"></p>
+          <ul id="slots"></ul>
+        </section>
+
+        <section class="card" id="help">
+          <h2>Help</h2>
+          <ul class="help">
+            <li><strong>Ring (or this page) never turns purple?</strong> The sensor
+            isn't talking. Check all six wires &mdash; especially the white one.
+            It's the one everyone skips, and without it the sensor can hear but
+            can't speak.</li>
+            <li><strong>Ring (or this page) turns yellow?</strong> The device
+            matched a finger but couldn't reach your Mac. Make sure the helper is
+            running.</li>
+            <li><strong>Nothing on this page at all?</strong> The helper serves
+            this page &mdash; if it stopped, so did this.</li>
+          </ul>
+          <p class="help-links">
+            <a href="https://github.com/anildash/dashtouch" target="_blank" rel="noopener">Project on GitHub</a>
+            &middot; <a href="https://github.com/anildash/dashtouch/blob/main/docs/troubleshooting.md" target="_blank" rel="noopener">Troubleshooting guide</a>
+            &middot; <a href="https://github.com/anildash/dashtouch/blob/main/docs/security.md" target="_blank" rel="noopener">Is this thing safe?</a>
+          </p>
+        </section>
+
+        <section class="card" id="debug">
+          <h2>Under the hood</h2>
+          <p class="hint">See every message crossing between your Mac and the
+          sensor, plus what this page just did &mdash; handy if something's not
+          working and you want to know why.</p>
+          <button id="debug-toggle">Show what's happening</button>
+          <div id="log"></div>
+        </section>
       </div>
-      <p id="progress"></p>
-      <ul id="slots"></ul>
-    </section>
-
-    <section>
-      <h2>If something's off</h2>
-      <ul class="help">
-        <li><strong>Ring never turns purple?</strong> The sensor isn't talking.
-        Check all six wires — especially the white one. It's the one everyone
-        skips, and without it the sensor can hear but can't speak.</li>
-        <li><strong>Ring turned yellow?</strong> The device matched your finger
-        but couldn't reach your Mac. Make sure the helper is running.</li>
-        <li><strong>Nothing on this page?</strong> The helper serves this page;
-        if it stopped, so did this.</li>
-      </ul>
-    </section>
-
-    <section id="debug">
-      <h2>Under the hood</h2>
-      <p class="hint">See every message crossing between your Mac and the
-      sensor, plus what this page just did — handy if something's not
-      working and you want to know why.</p>
-      <button id="debug-toggle">Show what's happening</button>
-      <div id="log"></div>
-    </section>
+    </div>
   </main>
   <script src="/app.js"></script>
 </body>

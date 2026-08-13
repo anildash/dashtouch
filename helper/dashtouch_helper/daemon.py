@@ -27,7 +27,8 @@ class Daemon:
         self._events_lock = threading.Lock()
         self.events: list[dict] = []
         self.state = {"connected": False, "last_line": "", "sensor": "unknown",
-                      "fw": "unknown", "enroll_stage": ""}
+                      "fw": "unknown", "enroll_stage": "", "cap": "",
+                      "slots_used": []}
 
     # -- connection lifecycle -----------------------------------------------
     def _on_connect(self) -> None:
@@ -35,6 +36,7 @@ class Daemon:
         self._last_counter = 0
         self.state["connected"] = True
         self.send_command("STATUS")
+        self.send_command("INDEX")
 
     # -- activity log (backs the web UI's debug view) ------------------------
     def log_event(self, direction: str, text: str) -> None:
@@ -73,12 +75,27 @@ class Daemon:
             self.state["enroll_stage"] = line
             print(f"device: {line}")
             self.log_event("device", line)
+            if line.startswith(("ENROLL_OK", "DELETE_OK")):
+                self.send_command("INDEX")
         elif line.startswith("STATUS_OK"):
             for tok in line.split():
                 if tok.startswith("sensor="):
                     self.state["sensor"] = tok.split("=", 1)[1]
                 if tok.startswith("fw="):
                     self.state["fw"] = tok.split("=", 1)[1]
+                if tok.startswith("cap="):
+                    self.state["cap"] = tok.split("=", 1)[1]
+        elif line.startswith("INDEX_OK "):
+            print(f"device: {line}")
+            self.log_event("device", line)
+            hex_str = line[len("INDEX_OK "):].strip()
+            try:
+                bitmap = bytes.fromhex(hex_str)
+            except ValueError:
+                return
+            used = [b * 8 + i for b, byte in enumerate(bitmap) for i in range(8)
+                    if byte >> i & 1]
+            self.state["slots_used"] = sorted(s for s in used if 1 <= s <= 200)
         elif line:
             print(f"device: {line}")
             self.log_event("device", line)

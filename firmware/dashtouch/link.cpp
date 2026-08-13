@@ -2,12 +2,14 @@
 #include "config.h"
 #include "secrets.h"
 #include "vectors.h"
+#include "r503.h"
 #include "esp_random.h"
 #include "mbedtls/md.h"
 #include "mbedtls/gcm.h"
 
 extern bool g_sensorOk;
 extern uint16_t g_capacity;
+extern R503 Sensor;
 
 void (*linkOnEnroll)(uint16_t) = nullptr;
 void (*linkOnDelete)(uint16_t) = nullptr;
@@ -114,6 +116,16 @@ void linkHandleCommand(const String& line) {
                   DT_FW_VERSION, g_sensorOk ? "ok" : "fail", g_capacity);
   } else if (line == "SELFTEST") {
     Serial.println(linkSelfTest() ? "SELFTEST_OK" : "SELFTEST_FAIL");
+  } else if (line == "INDEX") {
+    uint8_t bitmap[32];
+    int c = Sensor.readIndexTable(0, bitmap);
+    if (c == 0) {
+      char hex[65];
+      toHex(bitmap, 32, hex);
+      Serial.printf("INDEX_OK %s\n", hex);
+    } else {
+      Serial.printf("INDEX_FAIL %d\n", c);
+    }
   } else if (line.startsWith("ENROLL ")) {
     uint16_t slot = line.substring(7).toInt();
     if (slot >= DT_MIN_SLOT && slot <= DT_MAX_SLOT && linkOnEnroll)

@@ -122,3 +122,11 @@ int R503::auraCtl(uint8_t mode, uint8_t speed, uint8_t color, uint8_t count) {
   const uint8_t p[4] = {mode, speed, color, count};
   return command(0x35, p, sizeof(p));
 }
+
+int R503::readIndexTable(uint8_t page, uint8_t out[32]) {
+  uint8_t d[32];
+  size_t got = 0;
+  int c = command(0x1f, &page, 1, d, sizeof(d), &got);
+  if (c == 0 && got >= 32) memcpy(out, d, 32);
+  return c;
+}
