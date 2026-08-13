@@ -88,7 +88,12 @@ function updateRing(s) {
   const ring = document.getElementById("ring");
   ring.classList.remove(...RING_CLASSES);
   ring.classList.add(cls);
-  document.getElementById("ring-label").textContent = label;
+  const ringLabel = document.getElementById("ring-label");
+  if (cls === "ring--helper") {
+    ringLabel.innerHTML = '<a href="#help-yellow">Can\'t reach your Mac — why?</a>';
+  } else {
+    ringLabel.textContent = label;
+  }
 }
 
 // -- slot dropdown: truthful list of FREE slots, from the sensor's own ----

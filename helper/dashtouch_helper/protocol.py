@@ -17,7 +17,9 @@ _EV_RE = re.compile(
 
 
 class ProtocolError(Exception):
-    pass
+    def __init__(self, msg, code="protocol"):
+        super().__init__(msg)
+        self.code = code
 
 
 def _hmac256(key: bytes, msg: bytes) -> bytes:
@@ -27,15 +29,15 @@ def _hmac256(key: bytes, msg: bytes) -> bytes:
 def verify_ev(key: bytes, line: str, last_counter: int) -> EvResult:
     m = _EV_RE.match(line.strip())
     if not m:
-        raise ProtocolError(f"malformed EV line: {line!r}")
+        raise ProtocolError(f"malformed EV line: {line!r}", code="malformed")
     nonce_hex, counter_s, slot_s, score_s, mac_hex = m.groups()
     canonical = f"EV {nonce_hex} {counter_s} {slot_s} {score_s}".encode()
     expect = _hmac256(key, canonical)
     if not hmac_mod.compare_digest(expect.hex(), mac_hex):
-        raise ProtocolError("bad HMAC")
+        raise ProtocolError("bad HMAC", code="hmac")
     counter = int(counter_s)
     if counter <= last_counter:
-        raise ProtocolError(f"replayed counter {counter} <= {last_counter}")
+        raise ProtocolError(f"replayed counter {counter} <= {last_counter}", code="replay")
     return EvResult(bytes.fromhex(nonce_hex), counter, int(slot_s), int(score_s))
 
 

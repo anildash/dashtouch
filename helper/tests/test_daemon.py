@@ -135,6 +135,30 @@ def test_event_types_bump_seq():
     assert d.state["last_line"] == "TYPED"
 
 
+def test_hmac_failure_counted_by_error_code():
+    d = make_daemon()
+    # Tamper with the vector EV by flipping the last hex character
+    tampered = VECTORS["ev_line"][:-1] + ("0" if VECTORS["ev_line"][-1] != "0" else "1")
+    d.handle_line(tampered)
+    assert d.state["hmac_failures"] == 1
+
+
+def test_crafted_line_with_hmac_string_does_not_crash():
+    d = make_daemon()
+    # Crafted line containing "HMAC" but not a valid EV — should not increment hmac_failures
+    d.handle_line("EV HMACAAAA junk")
+    assert d.state["hmac_failures"] == 0
+
+
+def test_replayed_ev_does_not_count_as_hmac_failure():
+    d = make_daemon()
+    # Feed the valid vector EV twice — second should be rejected as replay, not HMAC failure
+    d.handle_line(VECTORS["ev_line"])
+    assert d.state["hmac_failures"] == 0
+    d.handle_line(VECTORS["ev_line"])
+    assert d.state["hmac_failures"] == 0
+
+
 # -- Task 7e: tolerant init + health() ---------------------------------------
 
 def test_construct_survives_missing_keychain_entries():

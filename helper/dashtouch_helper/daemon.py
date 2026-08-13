@@ -92,7 +92,7 @@ class Daemon:
             except protocol.ProtocolError as e:
                 print(f"rejected EV: {e}", file=sys.stderr)
                 self.log_event("helper", f"rejected EV: {e}")
-                if "HMAC" in str(e):
+                if getattr(e, "code", "") == "hmac":
                     self.state["hmac_failures"] += 1
                     self.log_event("helper",
                         f"pairing check failed ({self.state['hmac_failures']} rejected "
