@@ -1,5 +1,6 @@
 import http.client
 import json
+import threading
 import time
 from types import SimpleNamespace
 
@@ -12,6 +13,7 @@ class FakeDaemon:
                       "enroll_stage": "", "last_line": ""}
         self.sent = []
         self.events = []
+        self._events_lock = threading.Lock()
 
     def send_command(self, line):
         self.sent.append(line)

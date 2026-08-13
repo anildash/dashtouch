@@ -69,7 +69,9 @@ def _make_handler(daemon):
                 if not secrets.compare_digest(self.headers.get("X-DT-Token") or "", _TOKEN):
                     self._json(403, {"error": "bad token"})
                     return
-                self._json(200, {"events": list(daemon.events)})
+                with daemon._events_lock:
+                    events = list(daemon.events)
+                self._json(200, {"events": events})
             else:
                 self.send_error(404)
 
