@@ -39,6 +39,16 @@ int R503::readAck(uint8_t* data, size_t maxLen, size_t* gotLen,
   if (n < 12 || buf[0] != 0xef || buf[1] != 0x01 || buf[6] != 0x07)
     return R503_TIMEOUT;
   uint16_t plen = ((uint16_t)buf[7] << 8) | buf[8];
+
+  // Validate packet checksum; reject corrupted packets
+  uint32_t cksum = buf[6] + buf[7] + buf[8];
+  for (size_t i = 0; i < plen - 2; i++) {
+    cksum += buf[9 + i];
+  }
+  uint16_t rxCksum = ((uint16_t)buf[9 + plen - 2] << 8) | buf[9 + plen - 1];
+  if ((uint16_t)(cksum & 0xffff) != rxCksum)
+    return R503_TIMEOUT;
+
   uint8_t confirm = buf[9];
   size_t dataBytes = (plen >= 3) ? plen - 3 : 0;  // minus confirm + cksum
   if (data && gotLen) {
