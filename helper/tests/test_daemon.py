@@ -73,3 +73,27 @@ def test_new_session_resets_counter():
     d._on_connect()
     assert d._last_counter == 0
     assert d._ser.written == [b"STATUS\n"]
+
+
+def test_log_event_caps_at_400():
+    d = make_daemon()
+    for i in range(405):
+        d.log_event("helper", f"event {i}")
+    assert len(d.events) == 400
+    assert d.events[0]["text"] == "event 5"
+    assert d.events[-1]["text"] == "event 404"
+
+
+def test_handle_line_logs_device_event():
+    d = make_daemon()
+    d.handle_line("TOUCH")
+    assert d.events[-1] == {"t": d.events[-1]["t"], "dir": "device", "text": "TOUCH"}
+
+
+def test_send_command_redacts_pw_payload():
+    d = make_daemon()
+    d.send_command("PW abc123")
+    host_events = [e for e in d.events if e["dir"] == "host"]
+    assert len(host_events) == 1
+    assert host_events[0]["text"] == "PW <one-time encrypted password, 3 bytes>"
+    assert "abc123" not in host_events[0]["text"]

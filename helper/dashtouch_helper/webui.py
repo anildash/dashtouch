@@ -65,11 +65,17 @@ def _make_handler(daemon):
                 st = dict(daemon.state)
                 st["slots"] = _load_labels()
                 self._json(200, st)
+            elif path == "/api/log":
+                if not secrets.compare_digest(self.headers.get("X-DT-Token") or "", _TOKEN):
+                    self._json(403, {"error": "bad token"})
+                    return
+                self._json(200, {"events": list(daemon.events)})
             else:
                 self.send_error(404)
 
         def do_POST(self):
             if not secrets.compare_digest(self.headers.get("X-DT-Token") or "", _TOKEN):
+                daemon.log_event("web", "rejected: bad token")
                 self._json(403, {"error": "bad token"})
                 return
             try:
@@ -77,9 +83,11 @@ def _make_handler(daemon):
                 body = json.loads(self.rfile.read(n) or b"{}")
                 slot = int(body.get("slot", 0))
             except (ValueError, json.JSONDecodeError, AttributeError):
+                daemon.log_event("web", "rejected: bad request")
                 self._json(400, {"error": "bad request"})
                 return
             if not (1 <= slot <= 200):
+                daemon.log_event("web", "rejected: bad request")
                 self._json(400, {"error": "slot out of range"})
                 return
             with _labels_lock:
@@ -89,11 +97,13 @@ def _make_handler(daemon):
                     _save_labels(labels)
                     daemon.state["enroll_stage"] = ""
                     daemon.send_command(f"ENROLL {slot}")
+                    daemon.log_event("web", f"enroll slot {slot} accepted")
                     self._json(202, {"ok": True})
                 elif self.path == "/api/delete":
                     labels.pop(str(slot), None)
                     _save_labels(labels)
                     daemon.send_command(f"DELETE {slot}")
+                    daemon.log_event("web", f"delete slot {slot} accepted")
                     self._json(202, {"ok": True})
                 else:
                     self.send_error(404)

@@ -11,9 +11,13 @@ class FakeDaemon:
         self.state = {"connected": True, "sensor": "ok", "fw": "dt-0.1.0",
                       "enroll_stage": "", "last_line": ""}
         self.sent = []
+        self.events = []
 
     def send_command(self, line):
         self.sent.append(line)
+
+    def log_event(self, direction, text):
+        self.events.append({"t": time.time(), "dir": direction, "text": text})
 
 
 def start():
@@ -89,3 +93,21 @@ def test_start_persists_tokened_url(tmp_path, monkeypatch):
     url = webui.start(d, port=0)
     assert (tmp_path / "webui-url").read_text().strip() == url
     assert "token=" in url
+
+
+def test_log_requires_token_then_returns_events():
+    d, host, port, token = start()
+    status, _ = req(host, port, "GET", "/api/log")
+    assert status == 403
+    d.log_event("device", "hello")
+    status, body = req(host, port, "GET", "/api/log", token=token)
+    assert status == 200
+    assert any(e["text"] == "hello" for e in body["events"])
+
+
+def test_rejected_post_appends_web_event():
+    d, host, port, token = start()
+    req(host, port, "POST", "/api/enroll", {"slot": 1, "label": "x"})  # no token
+    status, body = req(host, port, "GET", "/api/log", token=token)
+    assert status == 200
+    assert any(e["text"] == "rejected: bad token" for e in body["events"])

@@ -11,3 +11,8 @@ button { padding: .45rem .9rem; border: 0; border-radius: 8px;
          background: #0071e3; color: #fff; cursor: pointer; }
 li button { background: #e8e8ed; color: #1d1d1f; margin-left: .5rem; }
 #progress { font-weight: 600; }
+#log { display: none; margin-top: .75rem; padding: .5rem .75rem;
+       background: #f5f5f7; border-radius: 8px; max-height: 300px;
+       overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+       font-size: .8rem; color: #1d1d1f; }
