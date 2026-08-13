@@ -7,11 +7,21 @@ minutes instead of a full session.
 All target the QT Py ESP32-S3. Pin labels map to GPIOs as follows (confirmed
 against the Arduino core's variant file, not assumed):
 
-| Pad label | GPIO |
-| --- | --- |
-| `TX` | 5 |
-| `RX` | 16 |
-| `A3` | 8 |
+| Pad label | GPIO | Role in this build |
+| --- | --- | --- |
+| `TX` | 5 | our **receive** (sensor yellow/TXD) |
+| `RX` | 16 | our **transmit** (sensor brown/RXD) |
+| `A3` | 8 | WAKEUP (sensor blue) — unused, see below |
+
+**The TX/RX roles are deliberately swapped relative to the silkscreen** —
+GPIO 5 cannot carry UART transmit on this board. Sketches that hardcode a
+single orientation must use `rx=5, tx=16`; `fp_boot_listen` and `fp_led` both
+shipped with the wrong (silkscreen) orientation and silently tested nothing.
+
+`A3`/WAKEUP is wired but unused: the production firmware sets
+`USE_INT_PIN = false` and polls `GenImg` instead, because on this module the
+WAKEUP line sat permanently at the active level, so the INT path scanned
+nonstop and every scan returned `GENIMG_FAIL 2`.
 
 ```bash
 FQBN="esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default"
@@ -41,18 +51,35 @@ events. Repeated cycles mean the board is resetting, which almost always
 means a shorted pin is browning out the regulator — a pattern that is
 invisible to a reader that exits on the first read error.
 
+## Wire ALL SIX sensor wires before diagnosing anything
+
+**This is the single most expensive lesson in this project.** Sensor pin 6
+(`3.3VT`, white) must be connected to `3V`. With it unwired the module powers
+up, receives commands, and *executes* them — the aura ring visibly obeys —
+but it **cannot reply to anything**. That looks exactly like a dead sensor,
+and it cost this project two "defective" verdicts and several sessions.
+
+Both power wires (pins 1 and 6) land on the single `3V` pad. If you are
+bringing wires up one at a time to isolate a fault, connect **both power
+wires first** — an under-powered module produces misleading results at every
+later step.
+
 ## Triage order
 
-**Test the board before you blame the sensor.** This is the hard-won one. Two
-different fingerprint sensors were diagnosed as defective through a board-side
-transmit fault that nobody had checked, because every test assumed the MCU's
-UART worked.
+**Test the board before you blame the sensor.** Two different fingerprint
+sensors were diagnosed as defective through a board-side transmit fault that
+nobody had checked, because every test assumed the MCU's UART worked.
 
+0. **Check all six wires**, especially `3.3VT` (see above).
 1. **`fp_loopback`** — does this board's UART work at all? No sensor involved.
 2. **`gpio_drive`** — if loopback fails, is the pin electrically sane at DC?
-3. **`fp_sweep`** — only once the board is proven: is the sensor alive?
-4. **`fp_boot_listen`** — if the sweep is silent, did the sensor ever transmit?
-5. **`fp_led`** — does the sensor hear us, independent of whether it can reply?
+3. **`fp_probe`** — raw `0xEF01` commands, no library. The most trustworthy
+   "is the sensor alive?" test; also dumps `ReadSysPara` (capacity, security
+   level, baud), which is the only model ID an unbranded module will give you.
+4. **`fp_boot_listen`** — did the sensor ever transmit a `0x55` handshake?
+5. **`fp_led`** — does the sensor hear us, independent of whether it replies?
+6. **`fp_sweep`** — baud/orientation sweep. **Read its caveats below before
+   trusting a negative result from it.**
 
 ## `fp_loopback` — "does the board's UART work?"
 
@@ -89,18 +116,48 @@ orientation swap happens in software via the ESP32's GPIO matrix, so no
 rewiring is needed. Requires no finger on the sensor — `verifyPassword()` is
 a pure handshake.
 
+> **`trailing_bytes` does NOT measure sensor silence — do not read it that
+> way.** `verifyPassword()` consumes the sensor's response internally, so
+> `trailing_bytes` counts only what arrived *after* the library was done.
+> Zero is the normal result whether the sensor answered or not. This metric
+> is what condemned the ZW111 ("all 14 combinations returned
+> `trailing_bytes=0`, proving the sensor never transmitted") — it proved no
+> such thing.
+>
+> A working R503 has been observed returning `confirm=0x00` to a raw
+> `VerifyPassword` via `fp_probe` while `fp_sweep` simultaneously reported
+> `verifyPassword=fail trailing_bytes=0` on all 14 combinations. **Trust
+> `fp_probe` over `fp_sweep` for any negative result.**
+
 - **A combination reports `verifyPassword=OK`** — that's your baud and
-  orientation. Done.
-- **`trailing_bytes=0` everywhere** — the sensor is transmitting *nothing*.
-  Before concluding the part is dead, confirm with `fp_loopback` that the
-  board can transmit. A sensor that never receives a command cannot reply,
-  and the result looks identical to a dead sensor.
+  orientation. Done. (A positive result here is still meaningful.)
+- **`verifyPassword=fail` everywhere** — inconclusive on its own. Confirm
+  with `fp_probe` before drawing any conclusion about the sensor.
 - **Nonzero `trailing_bytes` but no valid response** — bytes are arriving but
   aren't valid `0xEF01` frames. Suspect baud mismatch, crosstalk between
   adjacent TX/RX leads, or a floating input picking up noise.
 
 Using the canonical library rather than our own protocol code is the point:
 it removes our `fpCommand()` implementation from the list of suspects.
+
+## `fp_probe` — "what does the sensor actually say?" (start here)
+
+Sends raw `0xEF01` packets with no library involved, and dumps every byte
+that comes back. Three commands per cycle: `VerifyPassword` (0x13),
+`ReadSysPara` (0x0F), and a known-good `AuraLedConfig` (0x35) as a control.
+
+This exists because `fp_sweep` reported total failure on a sensor that was
+in fact answering every command correctly. Removing the Adafruit library from
+the picture settled it in one run.
+
+`ReadSysPara`'s reply is also the only model ID an unbranded module offers:
+
+```
+ef01 ffffffff 07 0013 00  0004 0000 00c8 0003 ffffffff 0002 0006  04ed
+                          status  id  cap  sec   addr   pkt  baud
+```
+
+`cap=0x00c8` = 200 templates (matches genuine GROW R503), `baud=6` = 57600.
 
 ## `fp_boot_listen` — "did the sensor ever transmit?"
 
@@ -135,15 +192,20 @@ response to anything you sent. Neither state tells you much on its own.
 
 ## Combined verdicts
 
-| fp_loopback | fp_led | fp_sweep | Meaning |
+| fp_loopback | fp_led | fp_probe | Meaning |
 | --- | --- | --- | --- |
-| Echoes back | Ring obeys | Valid responses | Everything works |
-| Echoes back | Ring obeys | Silence | Sensor receives but can't transmit — dead TX driver or broken TX wire |
-| Echoes back | No reaction | Silence | No power, no comms, or a fully dead part |
+| Echoes back | Ring obeys | `confirm=0x00` | Everything works |
+| Echoes back | **Ring obeys** | **No reply** | **Check `3.3VT` (pin 6) first — this is the exact signature of an unwired touch supply, and it is NOT evidence of a dead TX** |
+| Echoes back | No reaction | No reply | No power, no comms, or a fully dead part |
 | **Floods zeros** | any | any | **Board-side transmit fault — every sensor verdict below this line is unsafe** |
 
-If the "sensor receives but can't transmit" row comes up, measure the idle
-voltage on the sensor's TX line (probe the board's `RX` pin against `GND`,
-powered). A healthy idle UART line sits at ~3.3V. Anything meaningfully below
-the ESP32's ~2.48V logic-high threshold means the output stage can't drive a
-valid high — the ZW111 that prompted these sketches sat at 2.08V.
+The "receives but never replies" row was originally documented here as "dead
+TX driver or broken TX wire." **That was wrong**, and it sent this project
+down a long dead end. On the R503 that prompted this correction, the cause
+was simply that `3.3VT` was not connected.
+
+Measuring the idle voltage on the sensor's TX line is still worth doing, but
+**a low reading does not condemn the part**. A healthy idle UART line sits at
+~3.3V; the working R503 read **2.65V while `3.3VT` was unwired** and was
+completely functional once it was connected. Wire all six pins before you
+attribute a low reading to a damaged output stage.

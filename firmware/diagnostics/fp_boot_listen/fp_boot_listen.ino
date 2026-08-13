@@ -7,8 +7,8 @@
 // report survives even though the bytes arrived before the host was listening.
 #include <Arduino.h>
 
-static const int FP_RX_PIN = 16;  // QT Py header pin labeled "RX"
-static const int FP_TX_PIN = 5;   // QT Py header pin labeled "TX"
+static const int FP_RX_PIN = 5;   // QT Py header pin labeled "TX" -- proven receive pin, see 2026-08-12-qtpy-uart-fault.md
+static const int FP_TX_PIN = 16;  // QT Py header pin labeled "RX" -- proven transmit pin
 static const uint32_t UART_BAUD = 57600;
 static const uint32_t CAPTURE_MS = 3000;
 

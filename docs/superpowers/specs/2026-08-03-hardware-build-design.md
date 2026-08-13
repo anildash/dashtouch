@@ -198,6 +198,17 @@ reuse the ZW111 table above**:
 | 5 | WAKEUP | Finger detection signal | `A3` (GPIO 8) | Blue |
 | 6 | 3.3VT | Touch induction power supply, DC 3-6V, **must stay powered at all times** (same role as the ZW111's `V_SENSOR`) | `3V` (second wire, same header pin as pin 1) | White |
 
+> **PIN 6 IS NOT OPTIONAL — it is the single most costly mistake this build
+> made (confirmed 2026-08-13).** With `3.3VT` unconnected, the module powers
+> up, receives commands, and executes them (the aura ring visibly obeys
+> `OFF`/`RED`) but **cannot reply to a single command**. Every diagnostic
+> reads as a dead sensor. Connect white to `3V` and it answers immediately
+> with clean `0xEF01` ACKs.
+>
+> ESPHome's Grow component documents the same requirement ("it's recommended
+> to connect 3.3VT & 3.3V to 3.3V"). If you are adding wires one at a time to
+> isolate a fault, **connect both power wires first**.
+
 Unlike the ZW111 build, **this sensor ships with its own factory-crimped
 6-wire cable already attached** — there's no hand-wiring or color scheme to
 choose here. Identify wires by **pin position**, not by re-deriving colors:
@@ -263,6 +274,19 @@ changes are needed to switch sensors, only the wiring above.
 > and remains suspicious — but it is a single reading and no longer
 > sufficient on its own. Retest this unit in the working pin configuration
 > before trusting the conclusion below.
+>
+> **⚠️ Update 2026-08-13 — a second, independent reason this verdict is
+> unsafe.** The replacement R503 was found to produce *exactly* the same
+> "never transmits anything" symptom purely because its `3.3VT` pin (pin 6 /
+> `V_SENSOR` on the ZW111) was not connected. Once wired, it worked
+> perfectly. The 2.08V reading no longer looks suspicious either: the working
+> R503 measured **2.65V on its TX line while its own touch supply was
+> unwired**, and was fully functional once connected — so a low idle reading
+> is a symptom of an unpowered output stage, not a damaged one.
+>
+> **Before retesting the ZW111, wire `V_SENSOR` (pin 1) as well as `VCC`
+> (pin 3).** There is now a plausible path by which this unit was never
+> defective at all.
 
 The originally-received ZW111 unit was extensively debugged and never
 produced a single valid protocol response. Ruled out, each confirmed by

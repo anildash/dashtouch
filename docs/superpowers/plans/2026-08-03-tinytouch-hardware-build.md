@@ -7,9 +7,43 @@ tinyTouch's HID ("red pill") firmware end-to-end on a breadboard —
 fingerprint touch types the real macOS password — before any enclosure work
 begins.
 
-**Status as of 2026-08-11 — read this first when picking up on another
-machine.** (Superseded in part by the 2026-08-12 update below; the pin
-mapping bullet in particular is no longer the whole story.)
+## ✅ WORKING END TO END as of 2026-08-13
+
+The device does the whole job: touch an enrolled finger and the real macOS
+password is typed. Observed repeatedly —
+
+```
+TOUCH → MATCH 1 142 → EV <nonce> <hmac> → sent encrypted password
+      → EV_SENT → TYPED
+```
+
+**The blocker was never either sensor.** Two faults were stacked:
+
+1. **GPIO 5 cannot carry UART transmit on this board.** Routed around by
+   transmitting on GPIO 16 / receiving on GPIO 5, backwards vs. the
+   silkscreen. Firmware constants updated accordingly.
+2. **Sensor pin 6 (`3.3VT`, white wire) was never connected.** *This is the
+   one that mattered.* Without it the module receives and executes commands
+   (the ring visibly obeys) but cannot reply — indistinguishable from a dead
+   part. This single wire is the entire "defective sensor" arc.
+
+Also required: `USE_INT_PIN = false` in the firmware. On this module the
+WAKEUP line sits permanently at the active level, so the INT path scanned
+continuously and every scan returned `GENIMG_FAIL 2`. Polling `GenImg`
+instead works reliably.
+
+**Corrections to earlier records:** the R503 is not defective; the ZW111
+verdict is unsafe for two independent reasons (see the design spec); and
+`fp_sweep`'s `trailing_bytes=0` never meant "the sensor is silent" —
+`verifyPassword()` eats the reply first. See `firmware/diagnostics/README.md`.
+
+**Remaining:** launchd agent (Task 5 Steps 7-8) so the helper starts
+automatically. Everything before that is done and verified on hardware.
+
+---
+
+**Status as of 2026-08-11 — historical, kept for the debugging record.**
+(Superseded by the 2026-08-13 block above and the 2026-08-12 update below.)
 
 Everything except the sensor is done and verified:
 
@@ -157,8 +191,9 @@ needs these exact bytes.
 
 Expected: command exits 0 with no error output.
 
-- [ ] **Step 4: Store your real macOS password in Keychain** — **NOT DONE,
-  still required.** Verified absent: `security find-generic-password -a
+- [x] **Step 4: Store your real macOS password in Keychain** — DONE
+  (2026-08-13, set by the user directly).
+  Previously recorded as: Verified absent: `security find-generic-password -a
   tinyTouch -s tinyTouch` returns nothing. Task 5's end-to-end test cannot
   pass until this is set. **Run this yourself in your own terminal** — it
   takes your real login password as an argument, so it should not be run
@@ -195,7 +230,7 @@ to match between Keychain and `secrets.h`.
   `Finger.begin(...)` (line 431) and `pinMode(FP_INT_PIN, ...)` (line 427)
   later in the same file — no other task touches these.
 
-- [ ] **Step 1: Confirm current values**
+- [x] **Step 1: Confirm current values** — DONE
 
 ```bash
 grep -n "FP_TX_PIN\|FP_RX_PIN\|FP_INT_PIN" firmware/tiny_touch_keyboard/tiny_touch_keyboard.ino
@@ -232,7 +267,7 @@ than the A0/GPIO18 an earlier draft of this plan specified. Both are valid
 free pins; A3 is what's actually soldered and hardcoded now, so it's
 authoritative. Steps 3-4 below are kept for reference.)
 
-- [ ] **Step 3: Verify the edit**
+- [x] **Step 3: Verify the edit** — DONE
 
 ```bash
 grep -n "FP_TX_PIN\|FP_RX_PIN\|FP_INT_PIN" firmware/tiny_touch_keyboard/tiny_touch_keyboard.ino
@@ -245,7 +280,7 @@ Expected output includes:
 16:static const int FP_INT_PIN = 8;  // QT Py ESP32-S3 header pin labeled "A3"
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit** — DONE
 
 Already done in `2d16fe0` ("Fix QT Py ESP32-S3 pin mapping and add
 fingerprint enrollment").
@@ -260,7 +295,7 @@ fingerprint enrollment").
 - Consumes: pin assignments from Task 2 (`FP_TX_PIN=5`, `FP_RX_PIN=16`,
   `FP_INT_PIN=8`).
 
-- [ ] **Step 1: Wire on a breadboard (power off)**
+- [x] **Step 1: Wire on a breadboard (power off)** — DONE (all SIX wires; 3.3VT is mandatory)
 
 The sensor now in use is an **R503-compatible module** (Amazon ASIN
 B08HM8QDVW). Its pin order is **different from the ZW111's** — do not reuse
@@ -310,7 +345,7 @@ USB-OTG` in the IDE. Arduino IDE is not required — everything below uses
 - [x] **Step 3: Create secrets.h** — DONE, with the real pairing key already
   written in (not a placeholder). Confirmed gitignored.
 
-- [ ] **Step 4: Flash the firmware**
+- [x] **Step 4: Flash the firmware** — DONE
 
 ```bash
 arduino-cli board list
@@ -323,7 +358,7 @@ Note the `/dev/cu.usbmodemXXX` port (it changes between resets — often
 arduino-cli upload --fqbn esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default -p /dev/cu.usbmodemXXX firmware/tiny_touch_keyboard
 ```
 
-- [ ] **Step 5: Verify sensor detection**
+- [x] **Step 5: Verify sensor detection** — DONE (purple ring = READY)
 
 The boot banner only prints once, right at reset, so catch it by watching
 the port while pressing the physical reset button:
@@ -364,7 +399,7 @@ Debug order, learned the hard way on the ZW111:
    bytes = nothing arriving at all; garbage bytes that never start with
    `ef01` = wrong baud, crosstalk, or a bad unit.
 
-- [ ] **Step 6: Sanity-check the serial link**
+- [x] **Step 6: Sanity-check the serial link** — DONE (PING/PONG)
 
 ```bash
 .venv/bin/python -c "
@@ -399,13 +434,13 @@ reflashing between enrolling and running.
   the chosen slot (1-5), which `tiny_touch_keyboard.ino`'s `scanMatch()`
   will match against in Task 5.
 
-- [ ] **Step 1: Make sure nothing else has the serial port open**
+- [x] **Step 1: Make sure nothing else has the serial port open** — DONE
 
 Close Arduino IDE's Serial Monitor (or any other process using the port) —
 `tinytouch_enroll.py` needs exclusive access, same as `tinytouch_helper.py`
 does later.
 
-- [ ] **Step 2: Run the enroll script**
+- [x] **Step 2: Run the enroll script** — DONE (ENROLL_OK 1)
 
 ```bash
 cd /Users/anildash/Developer/dashtouch
@@ -445,7 +480,7 @@ from Task 3 is off — recheck TX/RX aren't swapped.
 - Consumes: pairing key from Task 1 Step 3 (Keychain), pin remap from
   Task 2, enrolled fingerprint from Task 4 (slot 1).
 
-- [ ] **Step 1: Confirm secrets.h is git-ignored**
+- [x] **Step 1: Confirm secrets.h is git-ignored** — DONE
 
 ```bash
 git check-ignore -v firmware/tiny_touch_keyboard/secrets.h
@@ -456,7 +491,7 @@ and add `firmware/tiny_touch_keyboard/secrets.h` to `.gitignore` before
 proceeding, so the real password/pairing-key-adjacent file is never
 committed.
 
-- [ ] **Step 2: Write the real pairing key into secrets.h**
+- [x] **Step 2: Write the real pairing key into secrets.h** — DONE
 
 Edit `firmware/tiny_touch_keyboard/secrets.h`, replacing the all-zero
 `PAIRING_KEY` array with the 32 bytes from the hex string generated in
@@ -469,7 +504,7 @@ static const uint8_t PAIRING_KEY[32] = {
 };
 ```
 
-- [ ] **Step 3: Re-flash tiny_touch_keyboard.ino**
+- [x] **Step 3: Re-flash tiny_touch_keyboard.ino** — DONE
 
 In Arduino IDE, re-open `tiny_touch_keyboard.ino` (from Task 2's edits),
 Upload again. Open Serial Monitor at 115200 baud.
@@ -480,7 +515,7 @@ BOOT tinyTouch HID
 READY
 ```
 
-- [ ] **Step 4: Start the macOS helper**
+- [x] **Step 4: Start the macOS helper** — DONE
 
 In a terminal:
 
@@ -493,7 +528,7 @@ cd /Users/anildash/Developer/dashtouch
 Expected: the helper starts and connects to the ESP32's serial port without
 error (leave it running).
 
-- [ ] **Step 5: Touch the enrolled finger to the sensor**
+- [x] **Step 5: Touch the enrolled finger to the sensor** — DONE (TYPED)
 
 Expected sequence in the ESP32's Serial Monitor:
 ```

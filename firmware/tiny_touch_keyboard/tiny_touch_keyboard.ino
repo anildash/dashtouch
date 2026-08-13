@@ -11,11 +11,19 @@ USBCDC USBSerial;
 #endif
 
 static const uint32_t UART_BAUD = 57600;
-static const int FP_TX_PIN = 5;   // QT Py ESP32-S3 header pin labeled "TX"
-static const int FP_RX_PIN = 16;  // QT Py ESP32-S3 header pin labeled "RX"
+// Deliberately crossed relative to the silkscreen: GPIO 5 will not carry UART
+// transmit on this board, so we transmit on 16 and receive on 5. Proven by
+// loopback -- see docs/superpowers/references/2026-08-12-qtpy-uart-fault.md.
+static const int FP_TX_PIN = 16;  // QT Py ESP32-S3 header pin labeled "RX"
+static const int FP_RX_PIN = 5;   // QT Py ESP32-S3 header pin labeled "TX"
 static const int FP_INT_PIN = 8;  // QT Py ESP32-S3 header pin labeled "A3"
 static const int INT_ACTIVE_VALUE = 1;
-static const bool USE_INT_PIN = true;
+// Polling mode: use the sensor's own GenImg as the finger detector rather
+// than the WAKEUP/INT pin. On this module WAKEUP sat permanently at the
+// INT_ACTIVE_VALUE level, so the INT path scanned nonstop and every scan
+// came back GENIMG_FAIL 2 ("can't detect finger"). Polling is independent of
+// that pin's polarity. Revisit if idle power draw ever matters.
+static const bool USE_INT_PIN = false;
 static const uint16_t START_SLOT = 1;
 static const uint16_t END_SLOT = 5;
 static const uint32_t RESULT_HOLD_MS = 500;

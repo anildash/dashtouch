@@ -1,10 +1,60 @@
 # QT Py UART transmit fault — investigation record
 
 **Date:** 2026-08-12
-**Status:** root cause not yet confirmed; a working configuration exists
+**Status:** GPIO 5 fault confirmed and routed around; root cause still
+unconfirmed. **See the 2026-08-13 resolution below — this was not the only
+fault, and on its own it did not explain the silence.**
 **Headline:** the pad labeled `TX` (GPIO 5) will not carry UART transmit on
 this board. Both fingerprint sensors previously diagnosed as defective were
 tested through it, so **neither verdict is safe.**
+
+---
+
+## RESOLVED 2026-08-13 — there was a second, independent fault
+
+The whole device now works end to end (match → HMAC'd event → helper →
+typed password). Two separate problems were stacked on top of each other,
+and fixing only the first left the symptom unchanged:
+
+1. **The GPIO 5 UART transmit fault** documented in the rest of this file.
+   Real, reproduced again on 2026-08-13, still routed around by transmitting
+   on GPIO 16.
+2. **Sensor pin 6 (`3.3VT`, white wire) was never connected.** This is the
+   one that actually mattered. With it unwired the module powers up, parses
+   commands, and *executes* them — the aura ring obeys `OFF` and `RED` — but
+   it cannot reply. Connect white to `3V` and every command returns a clean
+   ACK immediately.
+
+That second fault is what produced this project's entire "the sensor is
+dead" arc. A module that receives, obeys, and never answers is
+indistinguishable from a broken one if you only ever look at whether bytes
+come back.
+
+### Consequences for earlier conclusions
+
+- **The R503 is not defective.** It works.
+- **The ZW111 verdict is now unsafe for two independent reasons** — it was
+  tested through the dead GPIO 5 pad *and* very likely without `3.3VT`
+  connected. Retest before trusting "defective."
+- **The `2.08V` and `2.65V` idle readings on sensor TX** measure an
+  *unpowered* output stage, not a damaged one. The R503 read 2.65V while
+  3.3VT was unwired and worked perfectly once it was connected. Do not
+  condemn a part on that measurement alone.
+- **`0x55` handshake bytes seen during power-cycling were most likely
+  genuine**, not noise. They were dismissed mid-session and that was wrong.
+
+### `ReadSysPara` output from the working module
+
+```
+ef01 ffffffff 07 0013 00  0004 0000 00c8 0003 ffffffff 0002 0006  04ed
+                          status  id  cap  sec   addr   pkt  baud
+```
+
+Capacity `0x00c8` = **200 templates**, matching the genuine GROW R503 spec
+and contradicting the Amazon listing's "500" claim. Security level 3, packet
+size 128, baud register 6 (= 57600), default address. This is the closest
+thing to a model ID obtainable from an unbranded module, and it is the fast
+way to identify the next one.
 
 ---
 
