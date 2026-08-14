@@ -9,7 +9,9 @@ bool linkSelfTest();
 // Set by the .ino; invoked for ENROLL/DELETE commands.
 extern void (*linkOnEnroll)(uint16_t slot);
 extern void (*linkOnDelete)(uint16_t slot);
-// Set by the .ino; invoked after SET fp_swap persists the new value, so
-// the sensor UART is re-initialized with the new pin orientation and the
-// handshake re-run immediately — no reboot needed.
+// Set by the .ino; invoked after SET fp_swap persists the new value. Does
+// NOT attempt a live UART re-init (real hardware testing showed that's
+// unreliable and can misreport) — it marks the sensor state unverified.
+// A reboot is required before the new orientation's health can be trusted;
+// the SET_OK reply says so explicitly (reboot_required).
 extern void (*linkOnFpSwapChanged)();

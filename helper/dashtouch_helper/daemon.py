@@ -52,7 +52,16 @@ class Daemon:
                       # None until a SETTINGS_OK reply is seen — the page
                       # renders "reading…" (or, if it never arrives, an
                       # old-firmware notice) rather than assuming a value.
-                      "settings": None}
+                      "settings": None,
+                      # True from a SET_OK fp_swap ... reboot_required reply
+                      # until the next BOOT line. The firmware can't verify
+                      # a pin-orientation change without a live UART
+                      # re-init, and real hardware testing showed that
+                      # in-place re-init isn't trustworthy — it can report
+                      # success falsely. So health() must not assert the
+                      # sensor is ok (or even definitively bad) while this
+                      # is true; a power-cycle is the only way to know.
+                      "fp_swap_reboot_required": False}
 
     # -- connection lifecycle -----------------------------------------------
     def _on_connect(self) -> None:
@@ -115,6 +124,12 @@ class Daemon:
             parts = line.split()
             if len(parts) >= 3:
                 self.state["fw"] = parts[2]
+            # A real reboot is the only thing that has ever been shown to
+            # bring the sensor back correctly after a pin-orientation
+            # change — this is that reboot, so the "go verify with a
+            # power-cycle" flag is now satisfied. The STATUS reply that
+            # _on_connect() requests next carries the real, fresh reading.
+            self.state["fp_swap_reboot_required"] = False
             print(f"device: {line}")
             self.log_event("device", line)
         elif line.startswith("EV "):
@@ -227,12 +242,18 @@ class Daemon:
                     current[key] = val == "1"
                     self.state["settings"] = current
                     if key == "fp_swap":
-                        # The device just re-initialized the sensor UART and
-                        # re-ran the handshake on its own — ask for a fresh
-                        # STATUS so the Checkup's Sensor row reflects whether
-                        # that orientation actually works, without waiting
-                        # for the next poll.
-                        self.send_command("STATUS")
+                        # The firmware does NOT verify this live — real
+                        # hardware testing showed an in-place UART re-init
+                        # is unreliable and can report success falsely.
+                        # Requesting a fresh STATUS here would just read
+                        # back the same "can't trust it" state, so don't
+                        # bother. Instead: forget whatever the sensor row
+                        # said before (it described the OLD orientation,
+                        # not this one) and require a power-cycle before
+                        # health() will assert anything about the sensor
+                        # again.
+                        self.state["sensor"] = "unknown"
+                        self.state["fp_swap_reboot_required"] = True
                 elif key in ("idle_color", "idle_style"):
                     try:
                         current[key] = int(val)
@@ -260,6 +281,12 @@ class Daemon:
 
         if not connected:
             sensor_ok, sensor_state, sensor_detail = None, "off", "Can't check — connect the device first"
+        elif self.state["fp_swap_reboot_required"]:
+            # The orientation just changed and the firmware didn't (and
+            # can't reliably) verify it live. Don't assert ok OR bad here —
+            # both would be a guess dressed up as a fact.
+            sensor_ok, sensor_state, sensor_detail = None, "warn", \
+                "Pin orientation changed — power-cycle the device to check it"
         elif self.state["sensor"] == "ok":
             sensor_ok, sensor_state, sensor_detail = True, "ok", "Sensor's talking"
         else:

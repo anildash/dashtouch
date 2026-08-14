@@ -270,37 +270,30 @@ def test_pins_swap_and_normal_together_rejected(capsys):
     assert "not both" in out.lower()
 
 
-def test_pins_swap_sends_fp_swap_1_and_reports_sensor_ok(monkeypatch, capsys):
+def test_pins_swap_sends_fp_swap_1_and_asks_for_a_power_cycle(monkeypatch, capsys):
+    # The firmware can't verify a live pin-orientation change (real
+    # hardware testing showed in-place UART re-init is unreliable and can
+    # report success falsely) — so the CLI must not poll /api/status and
+    # claim a verdict. It should just say what's actually true: a
+    # power-cycle is needed before the new orientation can be trusted.
     monkeypatch.setattr(cli, "_daemon_post_setting", lambda key, value: (202, {"ok": True}))
-    monkeypatch.setattr(cli, "_daemon_status", lambda: {
-        "health": [{"id": "sensor", "ok": True, "detail": "Sensor's talking"}]})
-    monkeypatch.setattr(cli.time, "sleep", lambda *_: None)
+    status_calls = []
+    monkeypatch.setattr(cli, "_daemon_status", lambda: status_calls.append(1))
     assert cli.cmd_pins(_pins_args(swap=True)) == 0
     out = capsys.readouterr().out
     assert "swapped" in out.lower()
-    assert "sensor's talking" in out.lower()
+    assert "power-cycle" in out.lower()
+    assert not status_calls  # no live verification attempted
 
 
 def test_pins_normal_sends_fp_swap_0(monkeypatch, capsys):
     sent = []
     monkeypatch.setattr(cli, "_daemon_post_setting",
                         lambda key, value: sent.append((key, value)) or (202, {"ok": True}))
-    monkeypatch.setattr(cli, "_daemon_status", lambda: {
-        "health": [{"id": "sensor", "ok": True, "detail": "Sensor's talking"}]})
-    monkeypatch.setattr(cli.time, "sleep", lambda *_: None)
     assert cli.cmd_pins(_pins_args(normal=True)) == 0
     assert sent == [("fp_swap", 0)]
-
-
-def test_pins_swap_reports_when_sensor_does_not_come_back(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "_daemon_post_setting", lambda key, value: (202, {"ok": True}))
-    monkeypatch.setattr(cli, "_daemon_status", lambda: {
-        "health": [{"id": "sensor", "ok": False, "detail": "Not answering — check the wiring"}]})
-    monkeypatch.setattr(cli.time, "sleep", lambda *_: None)
-    assert cli.cmd_pins(_pins_args(swap=True)) == 1
     out = capsys.readouterr().out
-    assert "isn't answering" in out.lower() or "still isn't answering" in out.lower()
-    assert "--normal" in out
+    assert "power-cycle" in out.lower()
 
 
 def test_pins_swap_rejected_by_helper(monkeypatch, capsys):

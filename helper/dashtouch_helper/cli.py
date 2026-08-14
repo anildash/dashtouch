@@ -11,7 +11,6 @@ import secrets as pysecrets
 import shutil
 import subprocess
 import sys
-import time
 import urllib.error
 import urllib.request
 import webbrowser
@@ -292,25 +291,15 @@ def cmd_pins(args) -> int:
         return 1
 
     print(f"Set — pins are now {'swapped' if want_swap else 'at their default orientation'}.")
-    print("Giving the sensor a moment to come back...")
-    time.sleep(1.0)
-
-    status = _daemon_status()
-    sensor_row = None
-    if status is not None:
-        sensor_row = next((r for r in status.get("health", []) if r.get("id") == "sensor"), None)
-    if sensor_row is None:
-        print("Couldn't check whether the sensor came back — open the web UI to see.")
-        return 1
-    if sensor_row.get("ok"):
-        print("The sensor's talking — that orientation works.")
-        return 0
-    print(f"The sensor still isn't answering ({sensor_row.get('detail', 'no detail')}).")
-    if want_swap:
-        print("Try the default orientation instead: `dashtouch pins --normal`")
-    else:
-        print("Try the swapped orientation instead: `dashtouch pins --swap`")
-    return 1
+    print()
+    # The firmware can't verify this live: real hardware testing showed an
+    # in-place UART re-init is unreliable and can report success even when
+    # the sensor isn't actually reachable. Don't check and don't guess —
+    # tell the person the one thing that's actually true.
+    print("This needs a power-cycle before it can be trusted: unplug the gadget")
+    print("and plug it back in (or run `dashtouch doctor` after), then check")
+    print("`dashtouch pins` or the web UI to see whether that orientation works.")
+    return 0
 
 
 def cmd_doctor(args) -> int:

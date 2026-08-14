@@ -476,15 +476,41 @@ def test_set_ok_updates_fp_swap_in_existing_settings():
         "idle_color": 3, "idle_style": 1, "press_enter": True, "fp_swap": True}
 
 
-def test_set_ok_fp_swap_requests_fresh_status():
-    # SET_OK fp_swap means the device already re-initialized the sensor
-    # UART and re-ran the handshake on its own — the daemon should ask for
-    # a fresh STATUS so the Checkup's Sensor row reflects it right away.
+def test_set_ok_fp_swap_does_not_claim_a_fresh_status():
+    # The firmware can't verify a live pin-orientation change (real
+    # hardware testing showed in-place UART re-init is unreliable and can
+    # report success falsely) — so the daemon has nothing trustworthy to
+    # learn by asking again right now, and shouldn't pretend otherwise.
     d = make_daemon()
     d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1 fp_swap=0")
-    d.handle_line("SET_OK fp_swap 1")
-    sent = [msg for msg in d._ser.written]
-    assert any(b"STATUS\n" in msg for msg in sent)
+    before = list(d._ser.written)
+    d.handle_line("SET_OK fp_swap 1 reboot_required")
+    after = d._ser.written
+    assert after[len(before):] == []
+
+
+def test_set_ok_fp_swap_marks_sensor_unverified_pending_reboot():
+    d = make_daemon()
+    d.state["connected"] = True
+    d.state["sensor"] = "ok"  # describes the OLD orientation
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1 fp_swap=0")
+    d.handle_line("SET_OK fp_swap 1 reboot_required")
+    assert d.state["sensor"] == "unknown"
+    assert d.state["fp_swap_reboot_required"] is True
+    rows = {r["id"]: r for r in d.health()}
+    assert rows["sensor"]["state"] == "warn"
+    assert rows["sensor"]["ok"] is None
+    assert "power-cycle" in rows["sensor"]["detail"]
+
+
+def test_boot_line_clears_fp_swap_reboot_required():
+    d = make_daemon()
+    d.state["connected"] = True
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1 fp_swap=0")
+    d.handle_line("SET_OK fp_swap 1 reboot_required")
+    assert d.state["fp_swap_reboot_required"] is True
+    d.handle_line("BOOT dashtouch 0.1.0 proto=1")
+    assert d.state["fp_swap_reboot_required"] is False
 
 
 def test_set_ok_idle_color_does_not_request_status():

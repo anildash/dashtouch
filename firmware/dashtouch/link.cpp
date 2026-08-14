@@ -173,10 +173,13 @@ void linkHandleCommand(const String& line) {
     } else if (key == "fp_swap") {
       bool v = (val != 0);
       settingsSetFpSwap(v);
-      // Re-init the sensor UART with the new orientation and re-run the
-      // handshake right now — no reboot required to find out if it works.
+      // A live re-init was tried (twice) and shown on real hardware to be
+      // unreliable — see doFpSwapChanged()'s comment in the .ino. It marks
+      // the sensor state unverified rather than guessing; reboot_required
+      // tells the caller a power-cycle is the only way to actually find
+      // out whether the new orientation works.
       if (linkOnFpSwapChanged) linkOnFpSwapChanged();
-      Serial.printf("SET_OK fp_swap %u\n", v ? 1 : 0);
+      Serial.printf("SET_OK fp_swap %u reboot_required\n", v ? 1 : 0);
     } else {
       Serial.printf("SET_FAIL %s\n", key.c_str());
     }

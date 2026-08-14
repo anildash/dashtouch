@@ -3,7 +3,6 @@
 #include <Arduino.h>
 #include <USB.h>
 #include <USBHIDKeyboard.h>
-#include "driver/gpio.h"
 #include "config.h"
 #include "r503.h"
 #include "led.h"
@@ -86,38 +85,34 @@ static void initSensorUart() {
   int rxPin = fpSwap ? DT_FP_TX_PIN : DT_FP_RX_PIN;
   int txPin = fpSwap ? DT_FP_RX_PIN : DT_FP_TX_PIN;
   FingerSerial.end();
-  // HardwareSerial::end() frees the UART driver but does not release the
-  // ESP32 GPIO matrix routing on the pins it was using. On a live re-init
-  // triggered by SET fp_swap, the two physical pins are the same ones as
-  // before — only their TX/RX roles flip — so the pin that was just
-  // driving as TX output can stay latched to the old peripheral signal
-  // instead of going tri-state for its new RX role. The new UART then
-  // reads a dead line and every command times out, even though the wiring
-  // and the sensor are both fine. gpio_reset_pin() fully detaches a pin
-  // from any peripheral (input and output matrix) before we hand the pair
-  // to Sensor.begin() in the new orientation.
-  gpio_reset_pin((gpio_num_t)DT_FP_TX_PIN);
-  gpio_reset_pin((gpio_num_t)DT_FP_RX_PIN);
-  delay(20);  // let the reset settle before the handshake races it
   Sensor.begin(FingerSerial, rxPin, txPin, DT_UART_BAUD);
 }
 
-// Called after `SET fp_swap <n>` persists the new value. Re-initializes
-// the sensor UART with the new orientation and re-runs the handshake
-// immediately, so the person setting it learns right away whether that
-// orientation works — no reboot needed. Only the sensor UART is
-// affected; the USB CDC link to the Mac (and this printf) are untouched.
+// Called after `SET fp_swap <n>` persists the new value.
+//
+// Two live re-init strategies were built and flash-tested on real
+// hardware here: a plain FingerSerial.end()/begin() cycle, and a second
+// attempt adding gpio_reset_pin() on both sensor pins to fully detach
+// them from the GPIO matrix before reassigning. Neither reliably
+// restored a working sensor link in the swapped orientation. Worse, the
+// second attempt produced a false "handshake succeeded" reading
+// immediately after the remap — passing a stale or spurious read as a
+// genuine verification, which is worse than doing nothing, because it
+// tells the person their wiring is fine when it might not be.
+//
+// Only a real reboot — which re-runs setup()'s initSensorUart() +
+// verifyPassword() from a clean chip state — has ever been shown to
+// bring the sensor back correctly after a pin-orientation change. So
+// this function no longer touches the live UART/GPIO state at all: it
+// leaves whatever link setup() established alone, and marks the sensor
+// state unverified so nothing downstream (STATUS, the web UI, the CLI)
+// can report a health reading we haven't actually confirmed. The
+// SET_OK reply carries reboot_required so callers know to ask for a
+// power-cycle instead of trusting an on-the-spot check.
 static void doFpSwapChanged() {
-  initSensorUart();
-  g_sensorOk = (Sensor.verifyPassword() == 0);
-  if (g_sensorOk) {
-    Sensor.readSysPara(&g_capacity, nullptr);
-    ledSet(DT_LED_IDLE);
-    boardLedRed(false);
-  } else {
-    ledSet(DT_LED_BOOT_FAIL);
-    boardLedRed(true);
-  }
+  g_sensorOk = false;
+  ledSet(DT_LED_BOOT_FAIL);
+  boardLedRed(true);
 }
 
 static void doDelete(uint16_t slot) {
