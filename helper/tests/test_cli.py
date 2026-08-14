@@ -23,11 +23,11 @@ def test_render_plist_substitutes_paths():
 def test_enroll_uses_persisted_url(tmp_path, monkeypatch):
     from dashtouch_helper import webui
     monkeypatch.setattr(webui, "URL_PATH", tmp_path / "webui-url")
-    webui.URL_PATH.write_text("http://127.0.0.1:8737/?token=abc\n")
+    webui.URL_PATH.write_text("http://127.0.0.1:3274/?token=abc\n")
     opened = []
     monkeypatch.setattr(cli.webbrowser, "open", lambda u: opened.append(u))
     assert cli.cmd_enroll(None) == 0
-    assert opened == ["http://127.0.0.1:8737/?token=abc"]
+    assert opened == ["http://127.0.0.1:3274/?token=abc"]
 
 
 def test_enroll_without_daemon_fails_friendly(tmp_path, monkeypatch, capsys):

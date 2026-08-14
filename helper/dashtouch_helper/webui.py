@@ -3,6 +3,7 @@ token, so a random browser tab can't quietly enroll a finger."""
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import secrets
 import threading
@@ -114,7 +115,16 @@ def _make_handler(daemon, token):
     return Handler
 
 
-def start(daemon, port: int = 8737) -> str:
+def start(daemon, port: int = 3274) -> str:
+    # Allow env override: DASHTOUCH_PORT
+    if port == 3274:  # if using the default, check env
+        env_port = os.environ.get("DASHTOUCH_PORT", "").strip()
+        if env_port:
+            try:
+                port = int(env_port)
+            except ValueError:
+                # Invalid env value: ignore, use default
+                pass
     # Reuse existing token if present and valid; otherwise generate and persist.
     # Token stays valid across restarts by design; delete ~/.dashtouch/token to force fresh one.
     token = None
@@ -139,7 +149,14 @@ def start(daemon, port: int = 8737) -> str:
 
     # Create handler with captured token
     Handler = _make_handler(daemon, token)
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    except OSError:
+        # Port is busy; fall back to ephemeral binding (port 0)
+        daemon.log_event("helper", f"port {port} was busy — moved to ephemeral")
+        print(f"port {port} was busy — moved to ephemeral")
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+
     threading.Thread(target=server.serve_forever, daemon=True).start()
     actual = server.server_address[1]
     url = f"http://127.0.0.1:{actual}/?token={token}"

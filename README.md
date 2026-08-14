@@ -66,6 +66,8 @@ the firmware onto the board. Then:
 .venv/bin/dashtouch enroll   # opens your browser — add a finger
 ```
 
+The helper's page lives at port 3274 — DASH on a phone keypad, because of course it is.
+
 <details><summary>Flashing by hand (if setup couldn't see your board)</summary>
 
 ```sh

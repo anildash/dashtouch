@@ -188,3 +188,39 @@ def test_rejected_post_appends_web_event():
     status, body = req(host, port, "GET", "/api/log", token=token)
     assert status == 200
     assert any(e["text"] == "rejected: bad token" for e in body["events"])
+
+
+def test_default_port_is_3274():
+    """When no port argument is given, default is 3274 (or fallback if busy)."""
+    d = FakeDaemon()
+    url = webui.start(d)  # no port argument = use default
+    # Extract port from URL
+    actual_port = int(url.split(":")[2].split("/")[0])
+    # Port should be 3274 unless it was busy (check daemon log for fallback message)
+    if actual_port == 3274:
+        # Normal case: port 3274 was available
+        assert True
+    else:
+        # Fallback case: port 3274 was busy, check that we logged it
+        assert any("was busy" in e.get("text", "") for e in d.events)
+
+
+def test_dashtouch_port_env_override_ephemeral():
+    """DASHTOUCH_PORT=0 env variable overrides default and uses ephemeral binding."""
+    d = FakeDaemon()
+    import os
+    # Temporarily set env var
+    old_val = os.environ.get("DASHTOUCH_PORT")
+    try:
+        os.environ["DASHTOUCH_PORT"] = "0"
+        url = webui.start(d)  # no port argument, but env override = 0 (ephemeral)
+        # Extract port from URL
+        actual_port = int(url.split(":")[2].split("/")[0])
+        # Should be ephemeral (non-zero, assigned by OS)
+        assert actual_port > 0, "Ephemeral binding should assign a port > 0"
+        assert actual_port != 3274, "With DASHTOUCH_PORT=0, should not use default port"
+    finally:
+        if old_val is None:
+            os.environ.pop("DASHTOUCH_PORT", None)
+        else:
+            os.environ["DASHTOUCH_PORT"] = old_val
