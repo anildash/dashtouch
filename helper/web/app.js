@@ -4,10 +4,11 @@ let logInterval = null;
 let lastStatus = null;
 
 // -- finger tile row: which slot (if any) is mid-enrollment, being named
-// for the first time, or expanded for rename/remove.
+// for the first time, expanded for rename/remove, or being edited (rename/post-enroll naming).
 let pendingSlot = null;
 let namingSlot = null;
 let selectedSlot = null;
+let editingSlot = null;  // Tracks which finger is mid-edit to suppress re-renders
 
 // -- tool strip: Help / Under the hood open on demand, one at a time -------
 let activeTab = null; // "help" | "debug" | null
@@ -286,6 +287,7 @@ function renderFingerPanel(s) {
   panel.innerHTML = "";
 
   if (namingSlot !== null) {
+    editingSlot = namingSlot;  // Mark that we're editing
     panel.hidden = false;
     const label = document.createElement("label");
     label.textContent = "Name this finger";
@@ -297,11 +299,25 @@ function renderFingerPanel(s) {
     label.appendChild(input);
     const save = document.createElement("button");
     save.textContent = "Save";
-    save.onclick = () => saveFingerName(namingSlot, input.value, false);
+    const doSave = () => {
+      editingSlot = null;
+      saveFingerName(namingSlot, input.value, false);
+    };
+    const doCancel = () => {
+      editingSlot = null;
+      namingSlot = null;
+      if (lastStatus) renderFingerPanel(lastStatus);
+    };
+    save.onclick = doSave;
+    input.onkeydown = (e) => {
+      if (e.key === "Enter") { e.preventDefault(); doSave(); }
+      if (e.key === "Escape") { e.preventDefault(); doCancel(); }
+    };
     panel.appendChild(label);
     panel.appendChild(save);
     requestAnimationFrame(() => input.focus());
   } else if (selectedSlot !== null) {
+    editingSlot = selectedSlot;  // Mark that we're editing
     panel.hidden = false;
     const labels = s.slots || {};
     const entry = labels[String(selectedSlot)];
@@ -315,16 +331,34 @@ function renderFingerPanel(s) {
     label.appendChild(input);
     const save = document.createElement("button");
     save.textContent = "Save";
-    save.onclick = () => saveFingerName(selectedSlot, input.value, true);
+    const doSave = () => {
+      editingSlot = null;
+      saveFingerName(selectedSlot, input.value, true);
+    };
+    const doCancel = () => {
+      editingSlot = null;
+      selectedSlot = null;
+      if (lastStatus) renderFingerPanel(lastStatus);
+    };
+    save.onclick = doSave;
+    input.onkeydown = (e) => {
+      if (e.key === "Enter") { e.preventDefault(); doSave(); }
+      if (e.key === "Escape") { e.preventDefault(); doCancel(); }
+    };
     const remove = document.createElement("button");
     remove.className = "remove-btn";
     remove.textContent = "Remove";
-    remove.onclick = () => removeFinger(selectedSlot);
+    remove.onclick = () => {
+      editingSlot = null;
+      removeFinger(selectedSlot);
+    };
     panel.appendChild(label);
     panel.appendChild(save);
     panel.appendChild(remove);
+    requestAnimationFrame(() => input.focus());
   } else {
     panel.hidden = true;
+    editingSlot = null;
   }
 }
 
@@ -449,6 +483,19 @@ async function refresh() {
   const s = await r.json();
   lastStatus = s;
 
+  // Suppress finger panel re-renders while an edit is in progress.
+  // Belt and braces: also check if the active element is an input in the panel.
+  const panelEl = document.getElementById("finger-panel");
+  const activeIsInput = document.activeElement && panelEl && panelEl.contains(document.activeElement);
+  if (editingSlot !== null || activeIsInput) {
+    // Skip the panel rebuild this tick — let the edit continue undisturbed.
+    // Update everything else normally.
+    editingSlot = editingSlot || (activeIsInput ? true : null);  // Keep track if we detected focus
+  } else {
+    // Safe to rebuild: no edit in progress.
+    editingSlot = null;
+  }
+
   document.getElementById("conn").textContent = s.connected
     ? `Connected — firmware ${s.fw}`
     : "Not connected. Is it plugged in?";
@@ -508,7 +555,10 @@ async function refresh() {
   }
 
   renderFingerRow(s);
-  renderFingerPanel(s);
+  // Skip panel rebuild if an edit is in progress — this preserves focus and text in the input.
+  if (editingSlot === null) {
+    renderFingerPanel(s);
+  }
 }
 
 // -- debug view: live device/helper activity feed --------------------------
