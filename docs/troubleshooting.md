@@ -70,6 +70,22 @@ Fix: `.venv/bin/dashtouch pairing` walks you through generating a fresh
 key and reflashing in one go — run it again if you skipped the flash
 step the first time, or flash by hand with the commands it prints.
 
+## The settings section doesn't do anything
+
+If the Settings section on the page (resting ring color/style, press
+Return after typing) shows up disabled with a note about older firmware,
+that's the actual cause: those settings live on the gadget itself, and a
+gadget flashed before they existed simply never answers the `SETTINGS`
+command. Reflash it and the section un-disables itself — see the page's
+own `#help-reflash` entry (Help tab) for the exact commands, or:
+
+```sh
+arduino-cli compile --fqbn esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default firmware/dashtouch
+arduino-cli upload --fqbn esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default -p /dev/cu.usbmodemXXX firmware/dashtouch
+```
+
+(`arduino-cli board list` shows your port.)
+
 ## Enrolling keeps failing
 
 - Cover the whole ring with the flat pad of your finger, not the tip.

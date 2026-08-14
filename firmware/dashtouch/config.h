@@ -16,7 +16,9 @@
 // --- Behavior --------------------------------------------------------
 #define DT_POLL_MS 150          // GenImg poll cadence while idle
 #define DT_RESULT_HOLD_MS 1200  // how long match/no-match colors linger
-#define DT_PRESS_ENTER 1        // press Return after typing the password
+#define DT_PRESS_ENTER 1        // factory default only — the NVS-stored
+                                 // press_enter setting wins once set (see
+                                 // settings.cpp)
 
 // --- Finger detection ------------------------------------------------
 // Default: poll the sensor itself (works on every module, no extra

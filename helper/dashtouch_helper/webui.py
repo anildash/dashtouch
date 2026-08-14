@@ -203,6 +203,48 @@ def _make_handler(daemon, token):
                 self._json(200, result)
                 return
 
+            if self.path == "/api/settings":
+                try:
+                    n = int(self.headers.get("Content-Length", 0))
+                    body = json.loads(self.rfile.read(n) or b"{}")
+                    key = body["key"]
+                    raw_value = body["value"]
+                except (ValueError, json.JSONDecodeError, AttributeError,
+                        TypeError, KeyError):
+                    daemon.log_event("web", "rejected: bad request")
+                    self._json(400, {"error": "bad request"})
+                    return
+
+                if key == "idle_color":
+                    try:
+                        n_val = int(raw_value)
+                    except (TypeError, ValueError):
+                        n_val = None
+                    if n_val is None or not (0 <= n_val <= 7):
+                        daemon.log_event("web", "rejected: bad idle_color")
+                        self._json(400, {"error": "idle_color must be 0-7"})
+                        return
+                elif key == "idle_style":
+                    try:
+                        n_val = int(raw_value)
+                    except (TypeError, ValueError):
+                        n_val = None
+                    if n_val is None or not (1 <= n_val <= 2):
+                        daemon.log_event("web", "rejected: bad idle_style")
+                        self._json(400, {"error": "idle_style must be 1-2"})
+                        return
+                elif key == "press_enter":
+                    n_val = 1 if raw_value in (True, 1, "1") else 0
+                else:
+                    daemon.log_event("web", f"rejected: unknown settings key '{key}'")
+                    self._json(400, {"error": "unknown key"})
+                    return
+
+                daemon.send_command(f"SET {key} {n_val}")
+                daemon.log_event("web", f"settings: set {key} to {n_val}")
+                self._json(202, {"ok": True})
+                return
+
             try:
                 n = int(self.headers.get("Content-Length", 0))
                 body = json.loads(self.rfile.read(n) or b"{}")

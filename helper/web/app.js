@@ -10,6 +10,16 @@ let namingSlot = null;
 let selectedSlot = null;
 let editingSlot = null;  // Tracks which finger is mid-edit to suppress re-renders
 
+// -- device settings: resting ring color/style, press-Return -------------
+// Optimistic local copy of {idle_color, idle_style, press_enter} while a
+// change is in flight; dropped in favor of the poll's own s.settings as
+// soon as one arrives, per "optimistic UI, corrected by the next poll."
+let settingsOverride = null;
+// Counts consecutive polls where the device is connected but settings is
+// still null — after a poll or two, that means old firmware that never
+// answers SETTINGS, not just a slow first reply.
+let settingsNullPolls = 0;
+
 // -- tool strip: Help / Under the hood / (on-demand) Update available,
 // open on demand, one at a time. Update available is a third tab that only
 // exists once a check has found something — created lazily by
@@ -548,6 +558,151 @@ async function removeFinger(slot) {
   }
 }
 
+// -- device settings: resting ring color/style, press-Return -------------
+const IDLE_COLORS = [
+  {n: 0, name: "Off", cssVar: null},
+  {n: 1, name: "Red", cssVar: "--aura-red"},
+  {n: 2, name: "Blue", cssVar: "--aura-blue"},
+  {n: 3, name: "Purple", cssVar: "--aura-purple"},
+  {n: 4, name: "Green", cssVar: "--aura-green"},
+  {n: 5, name: "Yellow", cssVar: "--aura-yellow"},
+  {n: 6, name: "Cyan", cssVar: "--aura-cyan"},
+  {n: 7, name: "White", cssVar: "--aura-white"},
+];
+// What each collision color normally signals elsewhere in the LED
+// language — shown as a caution when the user picks one of these five for
+// their resting color. 2 (blue) and 3 (purple) are unclaimed, so absent
+// here on purpose.
+const COLOR_COLLISION_MEANING = {
+  1: "the gadget has a problem",
+  4: "a match",
+  5: "it can't reach your Mac",
+  6: "lift your finger, during enrollment",
+  7: "it's reading your finger",
+};
+
+async function postSetting(key, value) {
+  try {
+    const response = await fetch("/api/settings", {method: "POST",
+      headers: {"Content-Type": "application/json", "X-DT-Token": token},
+      body: JSON.stringify({key, value})});
+    if (!response.ok) {
+      document.getElementById("progress").textContent = "That didn't go through — this page has probably gone stale. Close this tab and open the fresh link from the helper (or run .venv/bin/dashtouch enroll).";
+    }
+  } catch {
+    document.getElementById("progress").textContent = "Can't reach the helper — is it still running?";
+  }
+}
+
+function currentSettingsBase() {
+  if (settingsOverride) return settingsOverride;
+  if (lastStatus && lastStatus.settings) return lastStatus.settings;
+  return {idle_color: 3, idle_style: 1, press_enter: true};
+}
+
+function setIdleColor(n) {
+  settingsOverride = {...currentSettingsBase(), idle_color: n};
+  if (lastStatus) renderSettings(lastStatus);
+  postSetting("idle_color", n);
+}
+
+function setIdleStyle(n) {
+  settingsOverride = {...currentSettingsBase(), idle_style: n};
+  if (lastStatus) renderSettings(lastStatus);
+  postSetting("idle_style", n);
+}
+
+function setPressEnter(on) {
+  settingsOverride = {...currentSettingsBase(), press_enter: on};
+  if (lastStatus) renderSettings(lastStatus);
+  postSetting("press_enter", on ? 1 : 0);
+}
+
+function renderSettings(s) {
+  const settings = settingsOverride || s.settings;
+  const known = !!settings;
+  const disabled = !known || !token;
+
+  document.getElementById("settings-reading").hidden =
+    known || !s.connected || settingsNullPolls >= 2;
+  document.getElementById("settings-old-fw").hidden =
+    known || settingsNullPolls < 2;
+
+  const active = settings || {idle_color: 3, idle_style: 1, press_enter: true};
+
+  // -- resting color swatches --
+  const swatchRow = document.getElementById("swatch-row");
+  swatchRow.innerHTML = "";
+  for (const c of IDLE_COLORS) {
+    const item = document.createElement("span");
+    item.className = "swatch-item";
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "idle-color";
+    input.id = `idle-color-${c.n}`;
+    input.className = "sr-only-radio";
+    input.checked = active.idle_color === c.n;
+    input.disabled = disabled;
+    input.setAttribute("aria-label", c.name);
+    input.onchange = () => setIdleColor(c.n);
+    const label = document.createElement("label");
+    label.setAttribute("for", input.id);
+    label.className = "swatch" + (c.n === 0 ? " swatch--off" : "")
+      + (active.idle_color === c.n ? " swatch--selected" : "");
+    if (c.cssVar) label.style.setProperty("--swatch-color", `var(${c.cssVar})`);
+    if (active.idle_color === c.n) label.innerHTML = CHECK_ICONS.ok;
+    item.appendChild(input);
+    item.appendChild(label);
+    swatchRow.appendChild(item);
+  }
+
+  const caution = document.getElementById("settings-color-caution");
+  const meaning = COLOR_COLLISION_MEANING[active.idle_color];
+  if (meaning && known) {
+    const name = IDLE_COLORS.find((c) => c.n === active.idle_color).name;
+    caution.textContent = `${name} normally means ${meaning}.`;
+    caution.hidden = false;
+  } else {
+    caution.hidden = true;
+  }
+
+  // -- resting style: hidden entirely when the color is Off --
+  const styleRow = document.getElementById("settings-style-row");
+  styleRow.hidden = !known || active.idle_color === 0;
+  if (!styleRow.hidden) {
+    const styleOptions = document.getElementById("style-options");
+    styleOptions.innerHTML = "";
+    for (const [n, label] of [[1, "Steady"], [2, "Breathing"]]) {
+      const opt = document.createElement("label");
+      opt.className = "style-option";
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "idle-style";
+      input.value = n;
+      input.checked = active.idle_style === n;
+      input.disabled = disabled;
+      input.onchange = () => setIdleStyle(n);
+      opt.appendChild(input);
+      opt.appendChild(document.createTextNode(label));
+      styleOptions.appendChild(opt);
+    }
+
+    const preview = document.getElementById("style-preview");
+    const colorDef = IDLE_COLORS.find((c) => c.n === active.idle_color);
+    if (colorDef && colorDef.cssVar) {
+      preview.style.setProperty("--swatch-color", `var(${colorDef.cssVar})`);
+      preview.style.setProperty("--swatch-color-rgb", `var(${colorDef.cssVar}-rgb)`);
+    }
+    preview.classList.toggle("style-preview--breathing", active.idle_style === 2);
+  }
+
+  // -- press Return after typing --
+  const toggle = document.getElementById("press-enter-toggle");
+  toggle.checked = !!active.press_enter;
+  toggle.disabled = disabled;
+  toggle.onchange = () => setPressEnter(toggle.checked);
+}
+
 // -- status marks: checkmark (ok) / empty checkbox (off) / x (bad) / warn --
 const CHECK_ICONS = {
   ok: '<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8.5L6.2 11.5L13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -637,6 +792,19 @@ async function refresh() {
   const cap = s.cap ? Number(s.cap) : 200;
   const used = (s.slots_used || []).length;
   document.getElementById("slots-counter").textContent = `${used} of ${cap} slots used`;
+
+  // Real settings data wins over any optimistic guess as soon as it
+  // arrives; otherwise count how long we've been connected without one
+  // (a poll or two of nulls means old firmware, not just a slow reply).
+  if (s.settings) {
+    settingsOverride = null;
+    settingsNullPolls = 0;
+  } else if (s.connected) {
+    settingsNullPolls++;
+  } else {
+    settingsNullPolls = 0;
+  }
+  renderSettings(s);
 
   // Single call site for computeRingState — it's also where lastSeq
   // advances, so it must run exactly once per poll.

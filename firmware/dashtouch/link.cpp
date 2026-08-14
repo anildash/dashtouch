@@ -3,6 +3,8 @@
 #include "secrets.h"
 #include "vectors.h"
 #include "r503.h"
+#include "led.h"
+#include "settings.h"
 #include "esp_random.h"
 #include "mbedtls/md.h"
 #include "mbedtls/gcm.h"
@@ -138,6 +140,38 @@ void linkHandleCommand(const String& line) {
       linkOnDelete(slot);
     else
       Serial.println("DELETE_FAIL badslot");
+  } else if (line == "SETTINGS") {
+    Serial.printf("SETTINGS_OK idle_color=%u idle_style=%u press_enter=%u\n",
+                  settingsIdleColor(), settingsIdleStyle(),
+                  settingsPressEnter() ? 1 : 0);
+  } else if (line.startsWith("SET ")) {
+    // "SET <key> <value>"
+    String rest = line.substring(4);
+    int sp = rest.indexOf(' ');
+    String key = sp >= 0 ? rest.substring(0, sp) : rest;
+    String valStr = sp >= 0 ? rest.substring(sp + 1) : "";
+    long val = valStr.toInt();
+    if (key == "idle_color") {
+      if (val >= 0 && val <= 7 && settingsSetIdleColor((uint8_t)val)) {
+        Serial.printf("SET_OK idle_color %u\n", (unsigned)val);
+        ledApplyIdleNow();
+      } else {
+        Serial.println("SET_FAIL idle_color");
+      }
+    } else if (key == "idle_style") {
+      if (val >= 1 && val <= 2 && settingsSetIdleStyle((uint8_t)val)) {
+        Serial.printf("SET_OK idle_style %u\n", (unsigned)val);
+        ledApplyIdleNow();
+      } else {
+        Serial.println("SET_FAIL idle_style");
+      }
+    } else if (key == "press_enter") {
+      bool v = (val != 0);
+      settingsSetPressEnter(v);
+      Serial.printf("SET_OK press_enter %u\n", v ? 1 : 0);
+    } else {
+      Serial.printf("SET_FAIL %s\n", key.c_str());
+    }
   } else if (line.length()) {
     Serial.printf("UNKNOWN_CMD %s\n", line.c_str());
   }

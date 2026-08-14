@@ -48,7 +48,11 @@ class Daemon:
         self.state = {"connected": False, "last_line": "", "sensor": "unknown",
                       "fw": "unknown", "enroll_stage": "", "cap": "",
                       "slots_used": [], "event_seq": 0, "hmac_failures": 0,
-                      "last_match": None}
+                      "last_match": None,
+                      # None until a SETTINGS_OK reply is seen — the page
+                      # renders "reading…" (or, if it never arrives, an
+                      # old-firmware notice) rather than assuming a value.
+                      "settings": None}
 
     # -- connection lifecycle -----------------------------------------------
     def _on_connect(self) -> None:
@@ -59,6 +63,7 @@ class Daemon:
         self.state["connected"] = True
         self.send_command("STATUS")
         self.send_command("INDEX")
+        self.send_command("SETTINGS")
 
     # -- activity log (backs the web UI's debug view) ------------------------
     def log_event(self, direction: str, text: str) -> None:
@@ -196,6 +201,37 @@ class Daemon:
             orphan_count = webui.prune_labels(labels_to_check)
             if orphan_count > 0:
                 self.log_event("helper", f"tidied up {orphan_count} leftover name(s)")
+        elif line.startswith("SETTINGS_OK "):
+            self.log_event("device", line)
+            settings = {}
+            for tok in line.split()[1:]:
+                if "=" not in tok:
+                    continue
+                key, val = tok.split("=", 1)
+                if key == "press_enter":
+                    settings[key] = val == "1"
+                elif key in ("idle_color", "idle_style"):
+                    try:
+                        settings[key] = int(val)
+                    except ValueError:
+                        continue
+            if {"idle_color", "idle_style", "press_enter"} <= settings.keys():
+                self.state["settings"] = settings
+        elif line.startswith("SET_OK "):
+            self.log_event("device", line)
+            parts = line.split()
+            if len(parts) >= 3:
+                key, val = parts[1], parts[2]
+                current = dict(self.state["settings"] or {})
+                if key == "press_enter":
+                    current[key] = val == "1"
+                    self.state["settings"] = current
+                elif key in ("idle_color", "idle_style"):
+                    try:
+                        current[key] = int(val)
+                        self.state["settings"] = current
+                    except ValueError:
+                        pass
         elif line:
             print(f"device: {line}")
             self.log_event("device", line)

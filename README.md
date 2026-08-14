@@ -115,6 +115,11 @@ Want it running all the time without a terminal open?
 Ring not matching this table, or stuck on one color? [docs/troubleshooting.md](docs/troubleshooting.md)
 walks through it symptom by symptom.
 
+Don't want a lit ring on your desk all night, or want Return pressed
+yourself instead of automatically? Both the resting ring (including
+turning it off entirely) and pressing Return after typing are settings on
+the helper's page, stored right on the gadget.
+
 ## Something not working?
 
 Run `.venv/bin/dashtouch doctor` for a quick check-up, or read

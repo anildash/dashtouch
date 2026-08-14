@@ -47,6 +47,11 @@ where `canonical` is the exact line content before the hmac field:
 | `ENROLL <slot>` | start enrollment; device walks `ENROLL_WAIT_FINGER_1` → `ENROLL_REMOVE_FINGER` → `ENROLL_WAIT_FINGER_2` → `ENROLL_OK <slot>` / `ENROLL_FAIL <stage>` |
 | `DELETE <slot>` → `DELETE_OK <slot>` / `DELETE_FAIL <slot>` | remove a template |
 | `PW <gcmnonce> <ct>` | the one-time encrypted password answering the pending `EV` |
+| `SETTINGS` → `SETTINGS_OK idle_color=<0-7> idle_style=<1-2> press_enter=<0\|1>` | read the stored device settings |
+| `SET idle_color <0-7>` → `SET_OK idle_color <n>` / `SET_FAIL idle_color` | set the idle ring color (0 = off/dark) and persist to NVS; applies immediately if currently idle |
+| `SET idle_style <1-2>` → `SET_OK idle_style <n>` / `SET_FAIL idle_style` | set the idle ring style (1 = steady, 2 = breathing) and persist to NVS; applies immediately if currently idle |
+| `SET press_enter <0\|1>` → `SET_OK press_enter <n>` | set whether Return is pressed after typing the password, and persist to NVS |
+| `SET <unknown key> ...` → `SET_FAIL <key>` | unrecognized settings key |
 
 Plaintext commands carry no secrets and trigger nothing a person at the
 device couldn't do by touching it.

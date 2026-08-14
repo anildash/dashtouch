@@ -555,3 +555,94 @@ def test_version_json_shape_and_sync_with_helper_version():
     assert isinstance(data["url"], str) and data["url"].startswith("https://")
     # Kept in sync by hand; this test is the tripwire if they drift.
     assert data["version"] == __version__
+
+
+# -- /api/settings ------------------------------------------------------------
+
+def test_settings_requires_token():
+    d, host, port, token = start()
+    status, _ = req(host, port, "POST", "/api/settings", {"key": "idle_color", "value": 3})
+    assert status == 403
+    assert d.sent == []
+
+
+def test_settings_idle_color_valid_sends_set_line():
+    d, host, port, token = start()
+    status, body = req(host, port, "POST", "/api/settings",
+                       {"key": "idle_color", "value": 5}, token)
+    assert status == 202
+    assert d.sent == ["SET idle_color 5"]
+
+
+def test_settings_idle_color_zero_is_valid():
+    d, host, port, token = start()
+    status, _ = req(host, port, "POST", "/api/settings",
+                    {"key": "idle_color", "value": 0}, token)
+    assert status == 202
+    assert d.sent == ["SET idle_color 0"]
+
+
+def test_settings_idle_color_out_of_range_high_rejected():
+    d, host, port, token = start()
+    status, _ = req(host, port, "POST", "/api/settings",
+                    {"key": "idle_color", "value": 8}, token)
+    assert status == 400
+    assert d.sent == []
+
+
+def test_settings_idle_color_out_of_range_negative_rejected():
+    d, host, port, token = start()
+    status, _ = req(host, port, "POST", "/api/settings",
+                    {"key": "idle_color", "value": -1}, token)
+    assert status == 400
+    assert d.sent == []
+
+
+def test_settings_idle_style_valid_sends_set_line():
+    d, host, port, token = start()
+    status, body = req(host, port, "POST", "/api/settings",
+                       {"key": "idle_style", "value": 2}, token)
+    assert status == 202
+    assert d.sent == ["SET idle_style 2"]
+
+
+def test_settings_idle_style_zero_rejected():
+    d, host, port, token = start()
+    status, _ = req(host, port, "POST", "/api/settings",
+                    {"key": "idle_style", "value": 0}, token)
+    assert status == 400
+    assert d.sent == []
+
+
+def test_settings_idle_style_three_rejected():
+    d, host, port, token = start()
+    status, _ = req(host, port, "POST", "/api/settings",
+                    {"key": "idle_style", "value": 3}, token)
+    assert status == 400
+    assert d.sent == []
+
+
+def test_settings_unknown_key_rejected():
+    d, host, port, token = start()
+    status, _ = req(host, port, "POST", "/api/settings",
+                    {"key": "brightness", "value": 1}, token)
+    assert status == 400
+    assert d.sent == []
+
+
+def test_settings_press_enter_coerces_true_variants():
+    for value in (True, 1, "1"):
+        d, host, port, token = start()
+        status, _ = req(host, port, "POST", "/api/settings",
+                        {"key": "press_enter", "value": value}, token)
+        assert status == 202
+        assert d.sent == ["SET press_enter 1"]
+
+
+def test_settings_press_enter_coerces_false_variants():
+    for value in (False, 0, "0"):
+        d, host, port, token = start()
+        status, _ = req(host, port, "POST", "/api/settings",
+                        {"key": "press_enter", "value": value}, token)
+        assert status == 202
+        assert d.sent == ["SET press_enter 0"]

@@ -63,6 +63,47 @@
         <p class="fyi-note">FYI: Your fingerprints are recorded on the
         sensor itself, and your Mac never sees any fingerprint data.</p>
 
+        <section class="card" id="settings-card">
+          <h2>Settings</h2>
+          <p class="hint settings-reading" id="settings-reading" hidden>Reading your gadget&rsquo;s settings&hellip;</p>
+          <p class="hint settings-old-fw" id="settings-old-fw" hidden>Your
+          gadget&rsquo;s firmware is older than these settings &mdash;
+          <a href="#help-reflash">reflash it to turn them on</a>.</p>
+
+          <div class="settings-row" id="settings-color-row">
+            <p class="settings-label">Resting color</p>
+            <p class="hint">What the ring shows when it&rsquo;s just sitting
+            there waiting. Pick Off if you&rsquo;d rather it stay dark until
+            you touch it.</p>
+            <div class="swatch-row" id="swatch-row" role="radiogroup" aria-label="Resting color"></div>
+            <p class="hint settings-collision-note">Red, green, yellow, cyan
+            and white are also used to tell you what&rsquo;s happening &mdash;
+            pick one of those and your resting ring will look like
+            something&rsquo;s going on. Purple and blue are free.</p>
+            <p class="settings-caution" id="settings-color-caution" hidden></p>
+          </div>
+
+          <div class="settings-row" id="settings-style-row" hidden>
+            <p class="settings-label">Resting style</p>
+            <p class="hint">Breathing fades gently in and out &mdash; dimmer
+            most of the time, but you can still see it&rsquo;s awake.</p>
+            <div class="style-row">
+              <div class="style-options" id="style-options" role="radiogroup" aria-label="Resting style"></div>
+              <span class="style-preview" id="style-preview" aria-hidden="true"></span>
+            </div>
+          </div>
+
+          <div class="settings-row settings-row--toggle">
+            <label class="settings-toggle-label" for="press-enter-toggle">
+              <span class="settings-label">Press Return after typing</span>
+              <input type="checkbox" id="press-enter-toggle" class="toggle-input">
+              <span class="toggle-switch" aria-hidden="true"></span>
+            </label>
+            <p class="hint">Submits the password for you. Turn it off if
+            you&rsquo;d rather press Return yourself.</p>
+          </div>
+        </section>
+
         <div class="tool-strip" id="tool-strip">
           <div class="tab-row" role="tablist" aria-label="Tools">
             <button type="button" class="tab-btn" id="tab-btn-help" data-tab="help" role="tab"
@@ -152,6 +193,21 @@
               flash step got skipped, so the board is still carrying the
               old key. See <a href="#help-rotate">changing your password or
               your pairing key</a> for the rotation &amp; reflash steps.</p>
+            </div>
+            <div class="help-entry" id="help-reflash">
+              <h3>Turning on the resting-ring and Return settings</h3>
+              <p>These settings live on the gadget itself, so a gadget
+              flashed before they existed won&rsquo;t answer them &mdash;
+              the section just stays disabled. Reflash it and they&rsquo;ll
+              work:</p>
+              <p><code>arduino-cli compile --fqbn
+              esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default
+              firmware/dashtouch</code></p>
+              <p><code>arduino-cli upload --fqbn
+              esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default
+              -p /dev/cu.usbmodemXXX firmware/dashtouch</code></p>
+              <p class="hint">Not sure of the port? <code>arduino-cli board
+              list</code> shows it.</p>
             </div>
             <div class="help-entry" id="help-autostart">
               <h3>About autostart</h3>

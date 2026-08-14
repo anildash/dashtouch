@@ -7,6 +7,7 @@
 #include "r503.h"
 #include "led.h"
 #include "link.h"
+#include "settings.h"
 
 HardwareSerial FingerSerial(1);
 R503 Sensor;
@@ -107,9 +108,7 @@ static void handleMatch(uint16_t slot, uint16_t score) {
           answered = true;
           if (linkDecryptPw(buf.c_str(), pw, sizeof(pw))) {
             Keyboard.print(pw);
-#if DT_PRESS_ENTER
-            Keyboard.write('\n');
-#endif
+            if (settingsPressEnter()) Keyboard.write('\n');
             memset(pw, 0, sizeof(pw));  // wipe
             typed = true;
           }
@@ -164,6 +163,8 @@ void setup() {
 #if DT_USE_WAKEUP_PIN
   pinMode(DT_WAKEUP_PIN, INPUT);
 #endif
+
+  settingsInit();  // load idle_color/idle_style/press_enter before the first ledSet
 
   Sensor.begin(FingerSerial, DT_FP_RX_PIN, DT_FP_TX_PIN, DT_UART_BAUD);
   ledInit(&Sensor);

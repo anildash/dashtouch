@@ -92,7 +92,7 @@ def test_new_session_resets_counter():
     d._last_counter = 99
     d._on_connect()
     assert d._last_counter == 0
-    assert d._ser.written == [b"STATUS\n", b"INDEX\n"]
+    assert d._ser.written == [b"STATUS\n", b"INDEX\n", b"SETTINGS\n"]
 
 
 def test_log_event_caps_at_400():
@@ -392,3 +392,55 @@ def test_keychain_failure_at_match_time_is_graceful(monkeypatch):
     assert any("Mac-side setup is incomplete" in e["text"] for e in helper_events)
     assert d.pairing_key is None
     assert d._password is None
+
+
+# -- Task 7m: device settings (idle ring color/style, press_enter) -----------
+
+def test_settings_defaults_to_none_until_seen():
+    d = make_daemon()
+    assert d.state["settings"] is None
+
+
+def test_settings_ok_parses_all_three_keys():
+    d = make_daemon()
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1")
+    assert d.state["settings"] == {"idle_color": 3, "idle_style": 1, "press_enter": True}
+
+
+def test_settings_ok_parses_press_enter_false():
+    d = make_daemon()
+    d.handle_line("SETTINGS_OK idle_color=0 idle_style=2 press_enter=0")
+    assert d.state["settings"] == {"idle_color": 0, "idle_style": 2, "press_enter": False}
+
+
+def test_set_ok_updates_idle_color_in_existing_settings():
+    d = make_daemon()
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1")
+    d.handle_line("SET_OK idle_color 6")
+    assert d.state["settings"] == {"idle_color": 6, "idle_style": 1, "press_enter": True}
+
+
+def test_set_ok_updates_idle_style_in_existing_settings():
+    d = make_daemon()
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1")
+    d.handle_line("SET_OK idle_style 2")
+    assert d.state["settings"] == {"idle_color": 3, "idle_style": 2, "press_enter": True}
+
+
+def test_set_ok_updates_press_enter_in_existing_settings():
+    d = make_daemon()
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1")
+    d.handle_line("SET_OK press_enter 0")
+    assert d.state["settings"] == {"idle_color": 3, "idle_style": 1, "press_enter": False}
+
+
+def test_set_ok_before_any_settings_ok_starts_from_empty():
+    d = make_daemon()
+    d.handle_line("SET_OK idle_color 4")
+    assert d.state["settings"] == {"idle_color": 4}
+
+
+def test_old_firmware_never_sends_settings_ok_state_stays_none():
+    d = make_daemon()
+    d.handle_line("STATUS_OK proto=1 fw=dt-0.1.0 sensor=ok cap=200")
+    assert d.state["settings"] is None

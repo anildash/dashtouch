@@ -19,3 +19,7 @@ enum DtLedState {
 void ledInit(R503* sensor);
 void ledSet(DtLedState s);
 void boardLedRed(bool on);
+// Re-sends the idle aura command right now, if the ring is currently
+// idle — called after a SET idle_color/idle_style so the user sees their
+// choice take effect immediately rather than on the next state change.
+void ledApplyIdleNow();
