@@ -1,12 +1,19 @@
 # Dashboard Touch
 
-**Touch ID for your Mac, without the $149 keyboard.**
+**Touch ID for your Mac, without an Apple keyboard.**
 
-Rest your finger on a little sensor and your password types itself — at
-the login screen, in sudo prompts, anywhere your Mac asks. You build it
-yourself from about $25 of parts, and you get to decide exactly where the
-sensor lives: your desk, your monitor stand, a drawer front you drilled
-one hole in.
+Automatically type in your password at the tap of your finger, anywhere 
+your Mac asks for it. For those of us who use our own keyboards, but miss
+the convenience and ease of Touch ID on Apple devices, Dashboard Touch
+lets you build your own solution from parts that you can get for about $30.
+
+Best of all, you get to decide exactly where the sensor lives: on your desk,
+in a custom enclosure, or wherever else you can imagine.
+
+Once you've installed a few simple tools, you can manage the whole thing
+through a friendly web interface, and it's all FREE and open source, with
+no surveillance or data sent anywhere. Your fingerprints never leave your
+sensor device, and your password never leaves your Mac.
 
 ![The Dashboard Touch helper page: a glowing purple ring showing the device
 is ready, a row of enrolled fingers, and a setup checklist with everything
