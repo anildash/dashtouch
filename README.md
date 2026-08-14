@@ -74,8 +74,9 @@ The sensor's cable has six colored leads. They land on the QT Py like so:
 | **White** | **touch power** | **`3V` (yes, a second wire on the same pin)** |
 
 **About that white wire:** without it, the sensor can hear but can't
-speak — everything will look broken in a way that took this project two
-weeks to figure out so you don't have to. Both red *and* white go to `3V`.
+speak — everything will look broken in a way that cost this project two
+sensors and a lot of dead ends before we worked it out, so you don't have
+to. Both red *and* white go to `3V`.
 
 ## Set it up
 

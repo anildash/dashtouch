@@ -101,7 +101,12 @@ that condemned the first sensor reported `trailing_bytes=0` and called it
 proof of silence. But the library call it wrapped *consumed the response
 first* — zero was the normal reading whether the sensor answered or not.
 The number was always going to be zero. It measured nothing, and it was
-believed for weeks.
+believed across several debugging sessions — long enough to condemn one
+sensor, order a replacement, and start condemning that one too.
+
+*(Timeline, for accuracy: the build ran Aug 3–14, 2026. Don't inflate it
+— the story is that a bad metric survived repeated scrutiny, not that it
+survived a long time.)*
 
 Corollary worth its own paragraph: **a low voltage reading isn't a dead
 component.** The sensor's TX line measured 2.65V against a 3.3V ideal —
