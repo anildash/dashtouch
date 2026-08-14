@@ -212,6 +212,12 @@ function updateCheckup(s) {
 
 async function refresh() {
   const r = await fetch("/api/status");
+  if (!r.ok && r.status === 403) {
+    document.getElementById("progress").textContent = "That didn't go through — this page has probably gone stale. Close this tab and open the fresh link from the helper (or run .venv/bin/dashtouch enroll).";
+    if (logInterval) clearInterval(logInterval);
+    logInterval = null;
+    return;
+  }
   const s = await r.json();
 
   document.getElementById("conn").textContent = s.connected
@@ -256,6 +262,11 @@ document.getElementById("enroll").onclick = async () => {
       body: JSON.stringify({slot, label})});
     if (response.ok) {
       enrolling = true;
+      // Restart log polling if a mutation succeeded
+      if (logVisible && !logInterval && token) {
+        fetchLog();
+        logInterval = setInterval(fetchLog, 1000);
+      }
     } else {
       document.getElementById("progress").textContent = "That didn't go through — this page has probably gone stale. Close this tab and open the fresh link from the helper (or run .venv/bin/dashtouch enroll).";
     }
@@ -279,7 +290,14 @@ async function fetchLog() {
   if (!token) return;
   try {
     const r = await fetch("/api/log", {headers: {"X-DT-Token": token}});
-    if (!r.ok) return;
+    if (!r.ok) {
+      if (r.status === 403) {
+        document.getElementById("progress").textContent = "That didn't go through — this page has probably gone stale. Close this tab and open the fresh link from the helper (or run .venv/bin/dashtouch enroll).";
+        if (logInterval) clearInterval(logInterval);
+        logInterval = null;
+      }
+      return;
+    }
     const data = await r.json();
     const logEl = document.getElementById("log");
     logEl.textContent = (data.events || []).map(formatEvent).join("\n");

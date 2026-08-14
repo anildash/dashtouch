@@ -11,8 +11,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 WEB_ROOT = pathlib.Path(__file__).parents[1] / "web"
 LABELS_PATH = pathlib.Path.home() / ".dashtouch" / "labels.json"
 URL_PATH = pathlib.Path.home() / ".dashtouch" / "webui-url"
+TOKEN_PATH = pathlib.Path.home() / ".dashtouch" / "token"
 
-_TOKEN = secrets.token_urlsafe(24)
 _labels_lock = threading.Lock()
 
 
@@ -28,7 +28,7 @@ def _save_labels(labels: dict) -> None:
     LABELS_PATH.write_text(json.dumps(labels, indent=2) + "\n")
 
 
-def _make_handler(daemon):
+def _make_handler(daemon, token):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -67,7 +67,7 @@ def _make_handler(daemon):
                 st["health"] = daemon.health()
                 self._json(200, st)
             elif path == "/api/log":
-                if not secrets.compare_digest(self.headers.get("X-DT-Token") or "", _TOKEN):
+                if not secrets.compare_digest(self.headers.get("X-DT-Token") or "", token):
                     self._json(403, {"error": "bad token"})
                     return
                 with daemon._events_lock:
@@ -77,7 +77,7 @@ def _make_handler(daemon):
                 self.send_error(404)
 
         def do_POST(self):
-            if not secrets.compare_digest(self.headers.get("X-DT-Token") or "", _TOKEN):
+            if not secrets.compare_digest(self.headers.get("X-DT-Token") or "", token):
                 daemon.log_event("web", "rejected: bad token")
                 self._json(403, {"error": "bad token"})
                 return
@@ -115,10 +115,27 @@ def _make_handler(daemon):
 
 
 def start(daemon, port: int = 8737) -> str:
-    server = ThreadingHTTPServer(("127.0.0.1", port), _make_handler(daemon))
+    # Reuse existing token if present and valid; otherwise generate and persist
+    token = None
+    try:
+        existing = TOKEN_PATH.read_text().strip()
+        if len(existing) >= 16:  # plausible token length
+            token = existing
+    except FileNotFoundError:
+        pass
+
+    if token is None:
+        token = secrets.token_urlsafe(24)
+        TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
+        TOKEN_PATH.write_text(token + "\n")
+        TOKEN_PATH.chmod(0o600)
+
+    # Create handler with captured token
+    Handler = _make_handler(daemon, token)
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     actual = server.server_address[1]
-    url = f"http://127.0.0.1:{actual}/?token={_TOKEN}"
+    url = f"http://127.0.0.1:{actual}/?token={token}"
     URL_PATH.parent.mkdir(parents=True, exist_ok=True)
     URL_PATH.write_text(url + "\n")
     URL_PATH.chmod(0o600)

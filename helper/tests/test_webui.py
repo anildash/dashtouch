@@ -123,6 +123,26 @@ def test_start_persists_tokened_url(tmp_path, monkeypatch):
     assert "token=" in url
 
 
+def test_start_reuses_existing_token(tmp_path, monkeypatch):
+    monkeypatch.setattr(webui, "TOKEN_PATH", tmp_path / "token")
+    # Pre-seed the token file
+    seeded_token = "seededtoken12345678"
+    (tmp_path / "token").write_text(seeded_token + "\n")
+    d = FakeDaemon()
+    url = webui.start(d, port=0)
+    assert f"token={seeded_token}" in url
+
+
+def test_start_creates_token_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(webui, "TOKEN_PATH", tmp_path / "token")
+    d = FakeDaemon()
+    url = webui.start(d, port=0)
+    assert (tmp_path / "token").exists()
+    token_content = (tmp_path / "token").read_text().strip()
+    assert len(token_content) >= 16
+    assert f"token={token_content}" in url
+
+
 def test_enroll_with_null_slot_returns_400():
     d, host, port, token = start()
     status, _ = req(host, port, "POST", "/api/enroll", {"slot": None, "label": "x"}, token)
