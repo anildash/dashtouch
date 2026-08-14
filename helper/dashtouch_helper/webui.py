@@ -115,20 +115,27 @@ def _make_handler(daemon, token):
 
 
 def start(daemon, port: int = 8737) -> str:
-    # Reuse existing token if present and valid; otherwise generate and persist
+    # Reuse existing token if present and valid; otherwise generate and persist.
+    # Token stays valid across restarts by design; delete ~/.dashtouch/token to force fresh one.
     token = None
     try:
         existing = TOKEN_PATH.read_text().strip()
         if len(existing) >= 16:  # plausible token length
             token = existing
-    except FileNotFoundError:
+    except (OSError, UnicodeDecodeError):
+        # File missing, directory in the way, unreadable, or corrupted — generate fresh token
         pass
 
     if token is None:
         token = secrets.token_urlsafe(24)
-        TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
-        TOKEN_PATH.write_text(token + "\n")
-        TOKEN_PATH.chmod(0o600)
+        try:
+            TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
+            TOKEN_PATH.write_text(token + "\n")
+            TOKEN_PATH.chmod(0o600)
+        except OSError:
+            # Write failed (e.g., parent is a file, permission denied) — proceed with in-memory token
+            # A working daemon with unpersisted token beats a dead one; dashtouch enroll degradation is acceptable
+            pass
 
     # Create handler with captured token
     Handler = _make_handler(daemon, token)

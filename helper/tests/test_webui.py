@@ -143,6 +143,28 @@ def test_start_creates_token_file(tmp_path, monkeypatch):
     assert f"token={token_content}" in url
 
 
+def test_start_with_token_path_as_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(webui, "TOKEN_PATH", tmp_path / "token")
+    # Create a directory where the token file should be
+    (tmp_path / "token").mkdir()
+    d = FakeDaemon()
+    url = webui.start(d, port=0)
+    # Should still work with an in-memory token despite the directory in the way
+    assert "token=" in url
+
+
+def test_start_with_invalid_utf8_token(tmp_path, monkeypatch):
+    monkeypatch.setattr(webui, "TOKEN_PATH", tmp_path / "token")
+    # Write invalid UTF-8 bytes to the token file
+    (tmp_path / "token").write_bytes(b"\xff\xfe")
+    d = FakeDaemon()
+    url = webui.start(d, port=0)
+    # Should generate a fresh token and overwrite the corrupted file
+    assert "token=" in url
+    token_content = (tmp_path / "token").read_text().strip()
+    assert len(token_content) >= 16
+
+
 def test_enroll_with_null_slot_returns_400():
     d, host, port, token = start()
     status, _ = req(host, port, "POST", "/api/enroll", {"slot": None, "label": "x"}, token)
