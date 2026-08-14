@@ -33,4 +33,7 @@
 #define DT_MIN_SLOT 1
 #define DT_MAX_SLOT 200
 
-#define DT_FW_VERSION "dt-0.1.0"
+// Project version, compiled in. One repo, one version — this must match
+// helper/dashtouch_helper/__init__.py's __version__ (and version.json,
+// which stays in sync with it). Update all three together.
+#define DT_FW_VERSION "0.1.0"

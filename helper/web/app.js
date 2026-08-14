@@ -784,7 +784,7 @@ function updateCheckup(s) {
 
     const text = document.createElement("span");
     text.className = "checkup-text";
-    text.textContent = `${row.label} — ${row.detail}`;
+    text.textContent = `${row.label}: ${row.detail}`;
     li.appendChild(text);
 
     if (state === "bad" || state === "warn") {
@@ -828,7 +828,7 @@ async function refresh() {
   }
 
   document.getElementById("conn-text").textContent = s.connected
-    ? `Connected: v${(s.fw || "").replace(/^dt-/, "")}`
+    ? `Connected: v${s.fw || ""}`
     : "Not connected. Is it plugged in?";
   document.getElementById("update-check-btn").hidden = !s.connected;
 

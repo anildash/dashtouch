@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <USB.h>
 #include <USBHIDKeyboard.h>
+#include "driver/gpio.h"
 #include "config.h"
 #include "r503.h"
 #include "led.h"
@@ -85,6 +86,19 @@ static void initSensorUart() {
   int rxPin = fpSwap ? DT_FP_TX_PIN : DT_FP_RX_PIN;
   int txPin = fpSwap ? DT_FP_RX_PIN : DT_FP_TX_PIN;
   FingerSerial.end();
+  // HardwareSerial::end() frees the UART driver but does not release the
+  // ESP32 GPIO matrix routing on the pins it was using. On a live re-init
+  // triggered by SET fp_swap, the two physical pins are the same ones as
+  // before — only their TX/RX roles flip — so the pin that was just
+  // driving as TX output can stay latched to the old peripheral signal
+  // instead of going tri-state for its new RX role. The new UART then
+  // reads a dead line and every command times out, even though the wiring
+  // and the sensor are both fine. gpio_reset_pin() fully detaches a pin
+  // from any peripheral (input and output matrix) before we hand the pair
+  // to Sensor.begin() in the new orientation.
+  gpio_reset_pin((gpio_num_t)DT_FP_TX_PIN);
+  gpio_reset_pin((gpio_num_t)DT_FP_RX_PIN);
+  delay(20);  // let the reset settle before the handshake races it
   Sensor.begin(FingerSerial, rxPin, txPin, DT_UART_BAUD);
 }
 

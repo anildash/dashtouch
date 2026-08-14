@@ -254,8 +254,7 @@ class Daemon:
             "label": "Device",
             "ok": connected,
             "state": "ok" if connected else "bad",
-            "detail": f"Connected — firmware {self.state['fw']}" if connected
-                      else "Not connected",
+            "detail": "Connected" if connected else "Not connected",
             "fix": "help-not-connected",
         })
 
@@ -310,7 +309,7 @@ class Daemon:
             "label": "Autostart",
             "ok": None,  # info row, never red — running by hand is a fine choice
             "state": "ok" if autostart_on else "off",
-            "detail": "Runs automatically at login" if autostart_on
+            "detail": "Starts at login" if autostart_on
                       else "Only while you run it by hand",
             "fix": "help-autostart",
         })
