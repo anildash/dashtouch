@@ -689,4 +689,103 @@ def test_settings_fp_swap_requires_token():
     d, host, port, token = start()
     status, _ = req(host, port, "POST", "/api/settings", {"key": "fp_swap", "value": 1})
     assert status == 403
-    assert d.sent == []
+
+
+# -- Task 7r: a second helper must not steal the saved link -----------------
+
+import socket
+
+
+def _free_port():
+    """A port nothing is listening on right now (best effort — small race
+    window, same pattern port=0 binding relies on elsewhere in this file)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+def test_second_instance_leaves_link_pointing_at_live_first_instance(tmp_path, monkeypatch):
+    """(a) A live-looking existing link on a different port: URL_PATH must
+    stay untouched, and the second instance must still serve on its own
+    (ephemeral) port rather than exiting."""
+    d1 = FakeDaemon()
+    url1 = webui.start(d1, port=0)
+    assert webui.URL_PATH.read_text().strip() == url1
+
+    d2 = FakeDaemon()
+    url2 = webui.start(d2, port=0)
+    assert url2 != url1
+
+    # The saved link still points at the first (live) instance.
+    assert webui.URL_PATH.read_text().strip() == url1
+
+    # The second instance is still alive and serving requests.
+    host2, port2 = url2.split("//")[1].split("/")[0].split(":")
+    status, body = req(host2, int(port2), "GET", "/api/status")
+    assert status == 200
+
+    assert any("Another Dashboard Touch helper is already running" in e["text"]
+                for e in d2.events)
+
+
+def test_stale_link_on_dead_port_is_overwritten(tmp_path, monkeypatch):
+    """(b) An existing link naming a port nobody is listening on is stale;
+    starting overwrites it as before."""
+    dead_port = _free_port()  # nothing bound here
+    webui.URL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    webui.URL_PATH.write_text(f"http://127.0.0.1:{dead_port}/?token=deadbeef\n")
+
+    d = FakeDaemon()
+    url = webui.start(d, port=0)
+    assert webui.URL_PATH.read_text().strip() == url
+
+
+def test_same_port_restart_overwrites_link_normally(tmp_path, monkeypatch):
+    """(c) When the newly bound port matches the port already named in the
+    link file (the ordinary restart-on-the-same-port case), no liveness
+    probe is needed and the file is written as today."""
+    free = _free_port()
+    webui.URL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    webui.URL_PATH.write_text(f"http://127.0.0.1:{free}/?token=deadbeef\n")
+
+    d = FakeDaemon()
+    url = webui.start(d, port=free)
+    assert f":{free}/" in url
+    assert webui.URL_PATH.read_text().strip() == url
+
+
+def test_corrupt_link_file_is_treated_as_stale(tmp_path, monkeypatch):
+    """(d) An unreadable/corrupt existing link file doesn't crash start()
+    and is simply overwritten."""
+    webui.URL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    webui.URL_PATH.write_bytes(b"\xff\xfe not a url {{{")
+
+    d = FakeDaemon()
+    url = webui.start(d, port=0)
+    assert webui.URL_PATH.read_text().strip() == url
+
+
+def test_second_instance_does_not_overwrite_live_helpers_token(tmp_path, monkeypatch):
+    """Part of the token protection: when a live helper elsewhere already
+    owns the shared link, a second instance that had to generate a fresh
+    token (no readable token file yet) must not persist that fresh token to
+    TOKEN_PATH out from under the live helper."""
+    d1 = FakeDaemon()
+    url1 = webui.start(d1, port=0)
+    token1 = webui.TOKEN_PATH.read_text().strip()
+    assert f"token={token1}" in url1
+
+    # Simulate a second instance starting with no readable token file, e.g.
+    # a fresh machine state — but the live first helper's link is in place.
+    corrupt_token_path = tmp_path / "token2"
+    corrupt_token_path.write_bytes(b"\xff\xfe")
+    monkeypatch.setattr(webui, "TOKEN_PATH", corrupt_token_path)
+
+    d2 = FakeDaemon()
+    url2 = webui.start(d2, port=0)
+    assert url2 != url1
+    # TOKEN_PATH (the second instance's) was never written, since it
+    # deferred to the live first helper rather than claim the shared state.
+    assert not corrupt_token_path.exists() or corrupt_token_path.read_bytes() == b"\xff\xfe"

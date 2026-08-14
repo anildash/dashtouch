@@ -9,6 +9,7 @@ import secrets
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -298,6 +299,26 @@ def _make_handler(daemon, token):
     return Handler
 
 
+def _probe_helper_alive(url: str, timeout: float = 1.0) -> bool:
+    """Best-effort check that some other process is actually answering at
+    the origin encoded in `url` (as saved in webui-url). GETs /api/status
+    with a short timeout, stdlib only. Any response at all — including a
+    non-2xx one — counts as "alive": we only care whether something is
+    listening and speaking HTTP, not whether it's happy. Any failure
+    (refused, timeout, DNS, garbage URL) means "not alive"."""
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        if not parsed.netloc:
+            return False
+        status_url = f"{parsed.scheme}://{parsed.netloc}/api/status"
+        req = urllib.request.Request(status_url, headers={"User-Agent": "dashtouch-helper"})
+        with urllib.request.urlopen(req, timeout=timeout):
+            pass
+        return True
+    except Exception:
+        return False
+
+
 def start(daemon, port: int = 3274) -> str:
     # Allow env override: DASHTOUCH_PORT
     if port == 3274:  # if using the default, check env
@@ -308,7 +329,8 @@ def start(daemon, port: int = 3274) -> str:
             except ValueError:
                 # Invalid env value: ignore, use default
                 pass
-    # Reuse existing token if present and valid; otherwise generate and persist.
+    # Reuse existing token if present and valid; otherwise generate one now
+    # and persist it later, once we know we're not stepping on a live helper.
     # Token stays valid across restarts by design; delete ~/.dashtouch/token to force fresh one.
     token = None
     try:
@@ -319,8 +341,55 @@ def start(daemon, port: int = 3274) -> str:
         # File missing, directory in the way, unreadable, or corrupted — generate fresh token
         pass
 
+    token_freshly_generated = token is None
     if token is None:
         token = secrets.token_urlsafe(24)
+
+    # Create handler with captured token
+    Handler = _make_handler(daemon, token)
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    except OSError:
+        # Port is busy — almost always because another Dashboard Touch
+        # helper is already running. Fall back to an ephemeral port; the
+        # link-file check below decides whether we get to publish it.
+        msg = (f"port {port} was busy — another Dashboard Touch helper is "
+               "probably already running; this instance moved to an ephemeral port")
+        daemon.log_event("helper", msg)
+        print(msg)
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    actual = server.server_address[1]
+    url = f"http://127.0.0.1:{actual}/?token={token}"
+
+    # Don't blindly overwrite the shared link/token files: if they already
+    # point at a DIFFERENT port and something is actually answering there,
+    # that's the helper holding the real hardware. Leave its link alone and
+    # just keep serving on our own (ephemeral) port.
+    other_helper_live = False
+    try:
+        existing_link = URL_PATH.read_text().strip()
+    except (OSError, UnicodeDecodeError):
+        existing_link = ""
+
+    if existing_link:
+        try:
+            existing_port = int(urllib.parse.urlsplit(existing_link).netloc.rsplit(":", 1)[1])
+        except (IndexError, ValueError):
+            existing_port = None
+        if existing_port is not None and existing_port != actual \
+                and _probe_helper_alive(existing_link):
+            other_helper_live = True
+            this_origin = f"http://127.0.0.1:{actual}"
+            existing_origin = f"http://127.0.0.1:{existing_port}"
+            msg = (f"Another Dashboard Touch helper is already running at "
+                   f"{existing_origin}; leaving the saved link pointing there. "
+                   f"This instance is at {this_origin}.")
+            daemon.log_event("helper", msg)
+            print(msg)
+
+    if token_freshly_generated and not other_helper_live:
         try:
             TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
             TOKEN_PATH.write_text(token + "\n")
@@ -330,20 +399,9 @@ def start(daemon, port: int = 3274) -> str:
             # A working daemon with unpersisted token beats a dead one; dashtouch enroll degradation is acceptable
             pass
 
-    # Create handler with captured token
-    Handler = _make_handler(daemon, token)
-    try:
-        server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    except OSError:
-        # Port is busy; fall back to ephemeral binding (port 0)
-        daemon.log_event("helper", f"port {port} was busy — moved to ephemeral")
-        print(f"port {port} was busy — moved to ephemeral")
-        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    if not other_helper_live:
+        URL_PATH.parent.mkdir(parents=True, exist_ok=True)
+        URL_PATH.write_text(url + "\n")
+        URL_PATH.chmod(0o600)
 
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    actual = server.server_address[1]
-    url = f"http://127.0.0.1:{actual}/?token={token}"
-    URL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    URL_PATH.write_text(url + "\n")
-    URL_PATH.chmod(0o600)
     return url
