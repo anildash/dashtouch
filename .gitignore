@@ -3,10 +3,6 @@
 __pycache__/
 *.pyc
 
-firmware/tiny_touch_keyboard/secrets.h
-firmware/tiny_touch_smartcard/main/secrets.h
-firmware/tiny_touch_smartcard/build/
-firmware/tiny_touch_smartcard/managed_components/
 firmware/dashtouch/secrets.h
 
 # Cloned third-party reference code (see docs/superpowers/references/)
