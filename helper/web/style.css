@@ -206,7 +206,6 @@ a:hover { opacity: .85; }
 .checkup-section {
   margin-top: 20px;
   padding: 1rem 0 0 .85rem;
-  border-top: 1px solid var(--line);
   border-left: 3px solid transparent;
 }
 .checkup-section--alert { border-left-color: var(--aura-red); }
@@ -276,6 +275,42 @@ a:hover { opacity: .85; }
   margin: 0 0 .75rem;
 }
 .health-summary .dot { flex: none; }
+
+/* -- on-demand update check: a small button after the version line, plus
+   a quiet result line underneath. Never appears unless connected — there's
+   no version to check against otherwise. ------------------------------- */
+#conn { display: flex; align-items: baseline; gap: .35rem; }
+.update-check-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  flex: none;
+}
+.update-check-btn svg { width: 100%; height: 100%; display: block; }
+.update-check-btn:hover { color: var(--text); filter: none; background: transparent; }
+.update-check-btn:disabled { cursor: default; }
+.update-check-btn.spinning svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .update-check-btn.spinning svg { animation: none; }
+}
+.update-line { color: var(--muted); font-size: .85rem; margin: .1rem 0 0; }
+
+/* -- Update available tab: same shell as Help / Under the hood, with a
+   red accent when the update fixes a security issue. -------------------- */
+.tab-btn--security { color: var(--aura-red); }
+.tab-btn--security:hover { color: var(--aura-red); filter: brightness(1.15); }
+.tab-btn--security.tab-btn--active { border-bottom-color: var(--aura-red); }
+.tab-panel--security { border-left: 3px solid var(--aura-red); }
 
 /* -- forms ------------------------------------------------------------ */
 label { display: flex; flex-direction: column; gap: .3rem; font-size: .8rem; color: var(--muted); }

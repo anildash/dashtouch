@@ -1,8 +1,11 @@
 import http.client
 import json
+import pathlib
 import threading
 import time
+import urllib.error
 from types import SimpleNamespace
+from unittest import mock
 
 from dashtouch_helper import webui
 
@@ -378,3 +381,177 @@ def test_enrolled_but_unlabeled_slot_still_appears_in_status(tmp_path, monkeypat
     assert body["slots_used"] == [1, 7]
     assert "7" not in body["slots"]
     assert body["slots"]["1"]["label"] == "thumb"
+
+
+# -- update check: version comparison ---------------------------------------
+
+def test_compare_versions_equal():
+    assert webui.compare_versions("0.1.0", "0.1.0") == 0
+
+
+def test_compare_versions_simple_greater_and_less():
+    assert webui.compare_versions("0.2.0", "0.1.0") == 1
+    assert webui.compare_versions("0.1.0", "0.2.0") == -1
+
+
+def test_compare_versions_numeric_not_lexicographic():
+    """0.10.0 > 0.9.0 as a real version comparison; plain string
+    comparison would get this backwards ("0.10.0" < "0.9.0" lexically)."""
+    assert webui.compare_versions("0.10.0", "0.9.0") == 1
+    assert webui.compare_versions("0.9.0", "0.10.0") == -1
+
+
+# -- update check: mocked network -------------------------------------------
+
+class FakeResponse:
+    def __init__(self, body: bytes):
+        self._body = body
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def test_check_update_finds_a_newer_version(monkeypatch):
+    payload = json.dumps({
+        "version": "9.9.9",
+        "security": False,
+        "headline": "Big new stuff.",
+        "url": "https://github.com/anildash/dashtouch",
+    }).encode()
+    monkeypatch.setattr(webui.urllib.request, "urlopen", lambda *a, **k: FakeResponse(payload))
+    result = webui.check_update(current_version="0.1.0")
+    assert result == {
+        "checked": True,
+        "current": "0.1.0",
+        "latest": "9.9.9",
+        "update_available": True,
+        "security": False,
+        "headline": "Big new stuff.",
+        "url": "https://github.com/anildash/dashtouch",
+    }
+
+
+def test_check_update_already_current(monkeypatch):
+    payload = json.dumps({"version": "0.1.0", "security": False,
+                           "headline": "", "url": ""}).encode()
+    monkeypatch.setattr(webui.urllib.request, "urlopen", lambda *a, **k: FakeResponse(payload))
+    result = webui.check_update(current_version="0.1.0")
+    assert result["checked"] is True
+    assert result["update_available"] is False
+
+
+def test_check_update_security_flag_passed_through(monkeypatch):
+    payload = json.dumps({"version": "0.2.0", "security": True,
+                           "headline": "Fixes a thing.", "url": "https://x"}).encode()
+    monkeypatch.setattr(webui.urllib.request, "urlopen", lambda *a, **k: FakeResponse(payload))
+    result = webui.check_update(current_version="0.1.0")
+    assert result["security"] is True
+
+
+def test_check_update_network_failure_returns_checked_false(monkeypatch):
+    def boom(*a, **k):
+        raise urllib.error.URLError("no route to host")
+    monkeypatch.setattr(webui.urllib.request, "urlopen", boom)
+    result = webui.check_update(current_version="0.1.0")
+    assert result["checked"] is False
+    assert "error" in result and isinstance(result["error"], str)
+
+
+def test_check_update_timeout_returns_checked_false(monkeypatch):
+    def boom(*a, **k):
+        raise TimeoutError("timed out")
+    monkeypatch.setattr(webui.urllib.request, "urlopen", boom)
+    result = webui.check_update(current_version="0.1.0")
+    assert result["checked"] is False
+
+
+def test_check_update_bad_json_returns_checked_false(monkeypatch):
+    monkeypatch.setattr(webui.urllib.request, "urlopen", lambda *a, **k: FakeResponse(b"not json{{{"))
+    result = webui.check_update(current_version="0.1.0")
+    assert result["checked"] is False
+
+
+def test_check_update_missing_version_key_returns_checked_false(monkeypatch):
+    payload = json.dumps({"security": False}).encode()
+    monkeypatch.setattr(webui.urllib.request, "urlopen", lambda *a, **k: FakeResponse(payload))
+    result = webui.check_update(current_version="0.1.0")
+    assert result["checked"] is False
+
+
+def test_check_update_malformed_version_returns_checked_false(monkeypatch):
+    payload = json.dumps({"version": "not-a-version"}).encode()
+    monkeypatch.setattr(webui.urllib.request, "urlopen", lambda *a, **k: FakeResponse(payload))
+    result = webui.check_update(current_version="0.1.0")
+    assert result["checked"] is False
+
+
+# -- /api/check-update endpoint ----------------------------------------------
+
+def test_check_update_endpoint_requires_token(monkeypatch):
+    d, host, port, token = start()
+    status, body = req(host, port, "POST", "/api/check-update", {})
+    assert status == 403
+    assert getattr(d, "last_update_check", None) is None
+
+
+def test_check_update_endpoint_success_never_hits_real_network(monkeypatch):
+    payload = json.dumps({"version": "9.9.9", "security": False,
+                           "headline": "Neat stuff.", "url": "https://x"}).encode()
+    monkeypatch.setattr(webui.urllib.request, "urlopen", lambda *a, **k: FakeResponse(payload))
+    d, host, port, token = start()
+    status, body = req(host, port, "POST", "/api/check-update", {}, token=token)
+    assert status == 200
+    assert body["checked"] is True
+    assert body["update_available"] is True
+    # The daemon's stored result is what /api/status hands back so the page
+    # can re-render without triggering another fetch.
+    assert d.last_update_check == body
+
+
+def test_check_update_endpoint_failure_is_still_http_200(monkeypatch):
+    def boom(*a, **k):
+        raise urllib.error.URLError("offline")
+    monkeypatch.setattr(webui.urllib.request, "urlopen", boom)
+    d, host, port, token = start()
+    status, body = req(host, port, "POST", "/api/check-update", {}, token=token)
+    assert status == 200
+    assert body["checked"] is False
+    assert "error" in body
+
+
+def test_check_update_endpoint_logs_a_helper_event(monkeypatch):
+    payload = json.dumps({"version": "0.1.0", "security": False,
+                           "headline": "", "url": ""}).encode()
+    monkeypatch.setattr(webui.urllib.request, "urlopen", lambda *a, **k: FakeResponse(payload))
+    d, host, port, token = start()
+    req(host, port, "POST", "/api/check-update", {}, token=token)
+    assert any(e["dir"] == "helper" and "update check" in e["text"] for e in d.events)
+
+
+def test_status_carries_last_update_check(monkeypatch):
+    d, host, port, token = start()
+    assert d  # sanity
+    status, body = req(host, port, "GET", "/api/status")
+    assert status == 200
+    assert body["last_update_check"] is None
+
+
+# -- version.json -------------------------------------------------------------
+
+def test_version_json_shape_and_sync_with_helper_version():
+    from dashtouch_helper import __version__
+    version_json_path = pathlib.Path(__file__).parents[2] / "version.json"
+    data = json.loads(version_json_path.read_text())
+    assert set(["version", "security", "headline", "url"]).issubset(data.keys())
+    assert isinstance(data["version"], str)
+    assert isinstance(data["security"], bool)
+    assert isinstance(data["headline"], str) and data["headline"]
+    assert isinstance(data["url"], str) and data["url"].startswith("https://")
+    # Kept in sync by hand; this test is the tripwire if they drift.
+    assert data["version"] == __version__

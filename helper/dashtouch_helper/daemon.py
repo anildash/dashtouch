@@ -40,6 +40,11 @@ class Daemon:
         self._events_lock = threading.Lock()
         self.events: list[dict] = []
         self.pending_label = None
+        # Set only by a click on the page's "check for updates" button
+        # (POST /api/check-update); never populated automatically. Kept
+        # in memory only — not persisted, doesn't survive a restart — so
+        # /api/status can hand it back to the page without re-fetching.
+        self.last_update_check = None
         self.state = {"connected": False, "last_line": "", "sensor": "unknown",
                       "fw": "unknown", "enroll_stage": "", "cap": "",
                       "slots_used": [], "event_seq": 0, "hmac_failures": 0,

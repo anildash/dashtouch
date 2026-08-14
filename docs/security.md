@@ -53,6 +53,40 @@ a random website you have open can't quietly enroll a finger.
 **Replays don't work.** Every match event is numbered and signed;
 yesterday's captured USB traffic can't be replayed today.
 
+## The one thing that talks to the internet
+
+Everything above happens entirely between your Mac and the gadget on
+your desk — no cloud, no account, no server of ours in the loop. There's
+exactly one exception, and it's opt-in every single time.
+
+**How it works.** Click the small refresh icon next to "Connected: v…"
+and the helper — never the browser — fetches one file:
+`https://raw.githubusercontent.com/anildash/dashtouch/main/version.json`.
+It reads the version number out of that file and compares it, locally, to
+the version you're running. That's the entire request. Nothing about you
+or your machine goes with it: no identifiers, no version number tucked
+into the URL, no telemetry, no account, no cookies. It's the exact same
+GET request your browser would make if you typed that URL in yourself
+and hit enter.
+
+**It only ever happens when you click the button.** There is no check at
+startup, no check on a schedule, no check when this page loads, no
+background phoning home — ever. That also means the broader fact holds:
+clicking that button is the *only* time Dashboard Touch talks to the
+internet at all. Every other page load, every fingerprint match, every
+poll of `/api/status` you see happening constantly in Under the hood —
+all of that stays on `127.0.0.1`, between your Mac and the gadget.
+
+**Why bother at all.** This is a device that types your real password.
+If a security problem ever turns up in it, you need a way to actually
+learn a fix exists — the honest alternative is "remember to go check
+GitHub every so often," and nobody does that. So the check exists, but
+on your terms: nothing runs unless you ask it to, and if what comes back
+is a security fix, it's called out in red rather than buried next to a
+changelog entry about icon spacing. Worth clicking occasionally, and
+especially worth clicking before you hand this thing a password you
+actually care about.
+
 ## So... should you?
 
 If your threat model is "roommates, family, coffee-shop table" — the

@@ -1,0 +1,7 @@
+{
+  "_comment": "version must stay in sync with dashtouch_helper.__version__ (helper/dashtouch_helper/__init__.py) — a git pull changes __version__; this file is what a release publishes.",
+  "version": "0.1.0",
+  "security": false,
+  "headline": "First public release.",
+  "url": "https://github.com/anildash/dashtouch"
+}

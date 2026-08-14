@@ -8,14 +8,78 @@ import pathlib
 import secrets
 import threading
 import time
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+from . import __version__
 
 WEB_ROOT = pathlib.Path(__file__).parents[1] / "web"
 LABELS_PATH = pathlib.Path.home() / ".dashtouch" / "labels.json"
 URL_PATH = pathlib.Path.home() / ".dashtouch" / "webui-url"
 TOKEN_PATH = pathlib.Path.home() / ".dashtouch" / "token"
 
+# The one and only outbound network call this software ever makes, and only
+# when a person clicks the "check for updates" button — see docs/security.md.
+# A static file, fetched and compared locally; nothing is sent but the GET.
+VERSION_URL = "https://raw.githubusercontent.com/anildash/dashtouch/main/version.json"
+UPDATE_CHECK_TIMEOUT = 5.0
+
 _labels_lock = threading.Lock()
+
+
+def _parse_version(version: str) -> tuple:
+    """Dot-separated numeric parts as a tuple of ints, so 0.10.0 > 0.9.0
+    (plain string comparison gets that backwards). Raises ValueError on
+    anything that isn't all-numeric parts."""
+    parts = str(version).strip().split(".")
+    if not parts:
+        raise ValueError("empty version")
+    return tuple(int(p) for p in parts)
+
+
+def compare_versions(a: str, b: str) -> int:
+    """-1 if a < b, 0 if equal, 1 if a > b — tuple-of-ints comparison, not
+    string comparison."""
+    ta, tb = _parse_version(a), _parse_version(b)
+    if ta < tb:
+        return -1
+    if ta > tb:
+        return 1
+    return 0
+
+
+def check_update(current_version: str = __version__, url: str = VERSION_URL,
+                  timeout: float = UPDATE_CHECK_TIMEOUT) -> dict:
+    """Fetch version.json from GitHub and compare it to the running
+    version. Never raises — every failure mode (offline, DNS, timeout, bad
+    JSON, non-200, malformed version) collapses to a friendly
+    {"checked": False, "error": ...} instead of propagating."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "dashtouch-helper"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+    except Exception:
+        # Offline, DNS failure, timeout, connection reset, TLS error — all
+        # collapse to the same friendly reason. Never crash the daemon.
+        return {"checked": False, "error": "Couldn't reach GitHub just now."}
+
+    try:
+        data = json.loads(raw)
+        latest = str(data["version"])
+        update_available = compare_versions(latest, current_version) > 0
+    except Exception:
+        return {"checked": False, "error": "Got something unexpected back from GitHub."}
+
+    return {
+        "checked": True,
+        "current": current_version,
+        "latest": latest,
+        "update_available": update_available,
+        "security": bool(data.get("security", False)),
+        "headline": str(data.get("headline", "")),
+        "url": str(data.get("url", "")),
+    }
 
 
 def _normalize_entry(value) -> dict:
@@ -104,6 +168,7 @@ def _make_handler(daemon, token):
                 st = dict(daemon.state)
                 st["slots"] = _load_labels()
                 st["health"] = daemon.health()
+                st["last_update_check"] = getattr(daemon, "last_update_check", None)
                 self._json(200, st)
             elif path == "/api/log":
                 if not secrets.compare_digest(self.headers.get("X-DT-Token") or "", token):
@@ -120,6 +185,24 @@ def _make_handler(daemon, token):
                 daemon.log_event("web", "rejected: bad token")
                 self._json(403, {"error": "bad token"})
                 return
+
+            if self.path == "/api/check-update":
+                # Token-gated like the other mutating routes: it causes a
+                # network request, so it isn't a plain GET. This is the one
+                # code path in the whole product that talks to the
+                # internet, and only because someone just clicked a button.
+                result = check_update(__version__)
+                daemon.last_update_check = result
+                if result.get("checked"):
+                    daemon.log_event("helper",
+                        f"update check: current={result['current']} "
+                        f"latest={result['latest']} "
+                        f"available={result['update_available']}")
+                else:
+                    daemon.log_event("helper", f"update check failed: {result.get('error')}")
+                self._json(200, result)
+                return
+
             try:
                 n = int(self.headers.get("Content-Length", 0))
                 body = json.loads(self.rfile.read(n) or b"{}")

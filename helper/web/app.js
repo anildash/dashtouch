@@ -10,25 +10,25 @@ let namingSlot = null;
 let selectedSlot = null;
 let editingSlot = null;  // Tracks which finger is mid-edit to suppress re-renders
 
-// -- tool strip: Help / Under the hood open on demand, one at a time -------
-let activeTab = null; // "help" | "debug" | null
+// -- tool strip: Help / Under the hood / (on-demand) Update available,
+// open on demand, one at a time. Update available is a third tab that only
+// exists once a check has found something — created lazily by
+// showUpdateTab(), so tab buttons/panels are queried generically by
+// data-tab / data-tab-panel rather than hardcoded ids. --------------------
+let activeTab = null; // "help" | "debug" | "update" | null
 // True once Help has auto-opened for the current run of trouble; reset when
 // the trouble clears so a fresh problem can auto-open it again.
 let helpAutoRevealed = false;
 
 function updateTabUI() {
-  const helpBtn = document.getElementById("tab-btn-help");
-  const debugBtn = document.getElementById("tab-btn-debug");
-  const helpPanel = document.getElementById("tab-panel-help");
-  const debugPanel = document.getElementById("tab-panel-debug");
-
-  helpBtn.classList.toggle("tab-btn--active", activeTab === "help");
-  helpBtn.setAttribute("aria-selected", String(activeTab === "help"));
-  helpPanel.hidden = activeTab !== "help";
-
-  debugBtn.classList.toggle("tab-btn--active", activeTab === "debug");
-  debugBtn.setAttribute("aria-selected", String(activeTab === "debug"));
-  debugPanel.hidden = activeTab !== "debug";
+  document.querySelectorAll(".tab-btn[data-tab]").forEach((btn) => {
+    const on = btn.dataset.tab === activeTab;
+    btn.classList.toggle("tab-btn--active", on);
+    btn.setAttribute("aria-selected", String(on));
+  });
+  document.querySelectorAll(".tab-panel[data-tab-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.tabPanel !== activeTab;
+  });
 }
 
 function openTab(name) {
@@ -52,13 +52,16 @@ function toggleTab(name) {
 document.getElementById("tab-btn-help").onclick = () => toggleTab("help");
 document.getElementById("tab-btn-debug").onclick = () => toggleTab("debug");
 
-document.querySelectorAll('.tab-row [role="tab"]').forEach((btn, i, all) => {
-  btn.addEventListener("keydown", (e) => {
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    e.preventDefault();
-    const dir = e.key === "ArrowRight" ? 1 : -1;
-    all[(i + dir + all.length) % all.length].focus();
-  });
+// Delegated (rather than bound once at load) so the Update available tab,
+// added dynamically once a check finds something, gets arrow-key nav too.
+document.querySelector(".tab-row").addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  const all = Array.from(document.querySelectorAll('.tab-row [role="tab"]'));
+  const i = all.indexOf(e.target);
+  if (i === -1) return;
+  e.preventDefault();
+  const dir = e.key === "ArrowRight" ? 1 : -1;
+  all[(i + dir + all.length) % all.length].focus();
 });
 
 // Any link into the Help entries (the static list above, or a Checkup "How
@@ -84,6 +87,118 @@ if (!token) {
   banner.textContent = "Heads up — this page is missing its key, so buttons won't work. Open the link the helper prints when it starts, or run .venv/bin/dashtouch enroll.";
   banner.hidden = false;
 }
+
+// -- on-demand update check: the product's one and only outbound network
+// call, and it only happens when someone clicks this button. The helper
+// (never this page) does the actual fetch — see POST /api/check-update
+// in webui.py and docs/security.md. --------------------------------------
+const REDUCED_MOTION = window.matchMedia
+  && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let updateChecking = false;
+let updateTabShown = false;
+
+function setUpdateLine(text) {
+  const line = document.getElementById("update-line");
+  if (!text) {
+    line.hidden = true;
+    line.textContent = "";
+  } else {
+    line.textContent = text;
+    line.hidden = false;
+  }
+}
+
+// Adds the "Update available" tab beside Help / Under the hood, once per
+// session — it persists once shown and is never re-checked automatically.
+function showUpdateTab(data) {
+  if (updateTabShown) return;
+  updateTabShown = true;
+
+  const caret = '<span class="tab-caret" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "tab-btn" + (data.security ? " tab-btn--security" : "");
+  btn.id = "tab-btn-update";
+  btn.dataset.tab = "update";
+  btn.setAttribute("role", "tab");
+  btn.setAttribute("aria-selected", "false");
+  btn.setAttribute("aria-controls", "tab-panel-update");
+  btn.innerHTML = (data.security ? '<span class="dot dot--red" aria-hidden="true"></span> ' : "")
+    + "Update available" + caret;
+  btn.onclick = () => toggleTab("update");
+  document.querySelector(".tab-row").appendChild(btn);
+
+  const panel = document.createElement("div");
+  panel.className = "tab-panel" + (data.security ? " tab-panel--security" : "");
+  panel.id = "tab-panel-update";
+  panel.dataset.tabPanel = "update";
+  panel.setAttribute("role", "tabpanel");
+  panel.setAttribute("aria-labelledby", "tab-btn-update");
+  panel.tabIndex = 0;
+  panel.hidden = true;
+
+  const lede = data.security
+    ? `<p><strong>This update fixes a security issue.</strong> Since this
+       gadget types your real password, it's worth updating sooner rather
+       than later.</p>`
+    : "";
+  panel.innerHTML = `${lede}
+    <p>Version ${escapeHtml(data.latest)} is out — you're on ${escapeHtml(data.current)}.</p>
+    <p>${escapeHtml(data.headline || "")}</p>
+    <p class="hint">To update: <code>git pull</code>, then re-run
+    <code>./setup</code>. Only reflash the gadget (<code>.venv/bin/dashtouch
+    flash</code>, or whatever the release notes say) if this update touches
+    the firmware — the release notes will say so.</p>
+    <p><a href="${escapeAttr(data.url)}" target="_blank" rel="noopener">More about this release</a></p>`;
+
+  document.getElementById("tool-strip").appendChild(panel);
+  openTab("update");
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+}
+function escapeAttr(s) {
+  return escapeHtml(s);
+}
+
+async function checkForUpdates() {
+  if (updateChecking || !token) return;
+  updateChecking = true;
+  const btn = document.getElementById("update-check-btn");
+  btn.disabled = true;
+  if (REDUCED_MOTION) {
+    setUpdateLine("Checking…");
+  } else {
+    btn.classList.add("spinning");
+    setUpdateLine(null);
+  }
+  try {
+    const r = await fetch("/api/check-update", {method: "POST",
+      headers: {"Content-Type": "application/json", "X-DT-Token": token},
+      body: "{}"});
+    const data = await r.json();
+    if (data.checked) {
+      if (data.update_available) {
+        setUpdateLine(null);
+        showUpdateTab(data);
+      } else {
+        setUpdateLine("You're up to date.");
+      }
+    } else {
+      setUpdateLine(data.error || "Couldn't check for updates just now.");
+    }
+  } catch {
+    setUpdateLine("Can't reach the helper — is it still running?");
+  } finally {
+    updateChecking = false;
+    btn.classList.remove("spinning");
+    btn.disabled = false;
+  }
+}
+
+document.getElementById("update-check-btn").onclick = checkForUpdates;
 
 // -- the twin ring: on-screen mirror of the physical aura ------------------
 const RING_CLASSES = ["ring--idle", "ring--reading", "ring--lift", "ring--match",
@@ -507,9 +622,17 @@ async function refresh() {
     editingSlot = null;
   }
 
-  document.getElementById("conn").textContent = s.connected
+  document.getElementById("conn-text").textContent = s.connected
     ? `Connected: v${(s.fw || "").replace(/^dt-/, "")}`
     : "Not connected. Is it plugged in?";
+  document.getElementById("update-check-btn").hidden = !s.connected;
+
+  // Re-render an already-fetched result rather than checking again — the
+  // daemon only ever populates last_update_check from an explicit click.
+  if (!updateTabShown && s.last_update_check && s.last_update_check.checked
+      && s.last_update_check.update_available) {
+    showUpdateTab(s.last_update_check);
+  }
 
   const cap = s.cap ? Number(s.cap) : 200;
   const used = (s.slots_used || []).length;
