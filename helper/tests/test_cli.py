@@ -22,6 +22,19 @@ def test_render_plist_substitutes_paths():
     assert "/tmp/wd" in out
 
 
+def test_render_plist_logs_go_under_library_not_shared_tmp(monkeypatch, tmp_path):
+    # The launchd log used to sit in shared, world-readable /tmp and carry
+    # the tokened web UI URL. It must now live under the user's own
+    # Library, same as the plist itself.
+    log_dir = tmp_path / "Logs" / "dashtouch"
+    monkeypatch.setattr(cli, "LOG_DIR", log_dir)
+    out = cli.render_plist("/usr/bin/python3", "/tmp/wd")
+    assert str(log_dir / "helper.log") in out
+    assert str(log_dir / "helper.err") in out
+    assert "/tmp/dashtouch-helper.log" not in out
+    assert "{logdir}" not in out
+
+
 def test_enroll_uses_persisted_url(tmp_path, monkeypatch):
     from dashtouch_helper import webui
     monkeypatch.setattr(webui, "URL_PATH", tmp_path / "webui-url")
@@ -136,6 +149,7 @@ def test_install_agent_uses_modern_launchctl_api(tmp_path, monkeypatch):
     """install-agent uses bootstrap/bootout with verification."""
     plist_path = tmp_path / "LaunchAgents" / "com.dashtouch.helper.plist"
     monkeypatch.setattr(cli, "PLIST_PATH", plist_path)
+    monkeypatch.setattr(cli, "LOG_DIR", tmp_path / "Logs" / "dashtouch")
     monkeypatch.setattr(cli, "REPO", tmp_path / "repo")
 
     run_calls = []
@@ -170,6 +184,7 @@ def test_install_agent_fails_if_bootstrap_fails(tmp_path, monkeypatch):
     """install-agent returns 1 if bootstrap fails."""
     plist_path = tmp_path / "LaunchAgents" / "com.dashtouch.helper.plist"
     monkeypatch.setattr(cli, "PLIST_PATH", plist_path)
+    monkeypatch.setattr(cli, "LOG_DIR", tmp_path / "Logs" / "dashtouch")
     monkeypatch.setattr(cli, "REPO", tmp_path / "repo")
 
     def mock_run(cmd, **kwargs):
@@ -188,6 +203,7 @@ def test_install_agent_fails_if_verification_fails(tmp_path, monkeypatch):
     """install-agent returns 1 if launchctl print fails (not registered)."""
     plist_path = tmp_path / "LaunchAgents" / "com.dashtouch.helper.plist"
     monkeypatch.setattr(cli, "PLIST_PATH", plist_path)
+    monkeypatch.setattr(cli, "LOG_DIR", tmp_path / "Logs" / "dashtouch")
     monkeypatch.setattr(cli, "REPO", tmp_path / "repo")
 
     def mock_run(cmd, **kwargs):

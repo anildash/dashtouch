@@ -28,7 +28,9 @@ fi
 
 if ! arduino-cli core list 2>/dev/null | grep -q "esp32:esp32"; then
   say "Teaching arduino-cli about the QT Py (one-time, ~2 minutes)."
-  arduino-cli config init --overwrite >/dev/null
+  # Only create a fresh config if one doesn't already exist — a builder who
+  # uses arduino-cli for other boards shouldn't lose their config here.
+  arduino-cli config init >/dev/null 2>&1 || true
   arduino-cli config set board_manager.additional_urls \
     https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
   arduino-cli core update-index

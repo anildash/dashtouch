@@ -158,14 +158,18 @@ function showUpdateTab(data) {
        gadget types your real password, it's worth updating sooner rather
        than later.</p>`
     : "";
+  const releaseLink = isSafeLinkUrl(data.url)
+    ? `<p><a href="${escapeAttr(data.url)}" target="_blank" rel="noopener">More about this release</a></p>`
+    : "";
+
   panel.innerHTML = `${lede}
     <p>Version ${escapeHtml(data.latest)} is out — you're on ${escapeHtml(data.current)}.</p>
     <p>${escapeHtml(data.headline || "")}</p>
     <p class="hint">To update: <code>git pull</code>, then re-run
-    <code>./setup</code>. Only reflash the gadget (<code>.venv/bin/dashtouch
-    flash</code>, or whatever the release notes say) if this update touches
-    the firmware — the release notes will say so.</p>
-    <p><a href="${escapeAttr(data.url)}" target="_blank" rel="noopener">More about this release</a></p>`;
+    <code>./setup</code>. Only reflash the gadget (see the README's
+    "Flashing by hand" section, or whatever the release notes say) if this
+    update touches the firmware — the release notes will say so.</p>
+    ${releaseLink}`;
 
   document.getElementById("tool-strip").appendChild(panel);
   openTab("update");
@@ -176,6 +180,17 @@ function escapeHtml(s) {
 }
 function escapeAttr(s) {
   return escapeHtml(s);
+}
+
+// escapeHtml only neutralizes & < > " — it does nothing about the URL
+// *scheme*, so a "javascript:" URL from remote content would survive it
+// and execute on this token-bearing page. The server already filters
+// version.json's "url" field to http(s) (see webui.py's check_update),
+// but this page renders that field directly, so it re-checks rather than
+// trusting the network hop between them.
+function isSafeLinkUrl(s) {
+  const v = String(s || "");
+  return v.startsWith("https://") || v.startsWith("http://");
 }
 
 async function checkForUpdates() {

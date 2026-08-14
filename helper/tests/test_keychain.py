@@ -14,8 +14,16 @@ def test_set_password_calls_security_add():
     with mock.patch("subprocess.run", return_value=ok()) as run:
         keychain.set_password("SER1", "pw")
     args = run.call_args[0][0]
+    kwargs = run.call_args[1]
     assert args[:2] == ["security", "add-generic-password"]
-    assert "DashboardTouch" in args and "SER1" in args and "pw" in args
+    assert "DashboardTouch" in args and "SER1" in args
+    # The secret must never appear on the command line — only piped in via
+    # stdin. "-w" is the last argument, with no value after it.
+    assert args[-1] == "-w"
+    assert "pw" not in args
+    # security prompts twice (password + retype confirmation) when -w is
+    # given no argv value, so both copies go over stdin.
+    assert kwargs.get("input") == "pw\npw\n"
 
 
 def test_get_password_parses_stdout():
@@ -34,6 +42,22 @@ def test_pairing_key_roundtrips_hex():
     key = bytes(range(32))
     with mock.patch("subprocess.run", return_value=ok()) as run:
         keychain.set_pairing_key("SER1", key)
-    assert key.hex() in run.call_args[0][0]
+    args = run.call_args[0][0]
+    kwargs = run.call_args[1]
+    # Same argv-safety requirement as the password: the hex key must be
+    # piped in via stdin, not passed as a CLI argument.
+    assert args[-1] == "-w"
+    assert key.hex() not in args
+    assert kwargs.get("input") == f"{key.hex()}\n{key.hex()}\n"
     with mock.patch("subprocess.run", return_value=ok(key.hex() + "\n")):
         assert keychain.get_pairing_key("SER1") == key
+
+
+def test_get_pairing_key_corrupt_hex_raises_keychain_error():
+    # A corrupt Keychain entry must surface as KeychainError, not a bare
+    # ValueError from bytes.fromhex — daemon.py only catches KeychainError,
+    # and under launchd's KeepAlive an uncaught ValueError crash-loops the
+    # helper with no diagnostic.
+    with mock.patch("subprocess.run", return_value=ok("not valid hex!\n")):
+        with pytest.raises(keychain.KeychainError):
+            keychain.get_pairing_key("SER1")

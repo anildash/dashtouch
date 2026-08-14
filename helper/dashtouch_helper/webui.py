@@ -71,6 +71,15 @@ def check_update(current_version: str = __version__, url: str = VERSION_URL,
     except Exception:
         return {"checked": False, "error": "Got something unexpected back from GitHub."}
 
+    # version.json is fetched over the network; its "url" field is remote
+    # content rendered as a link on the token-bearing page. escapeHtml on
+    # the client only neutralizes & < > " — a "javascript:" URL survives
+    # that and would execute. Reject anything that isn't a plain http(s)
+    # link here, server-side, rather than trusting the client alone.
+    release_url = str(data.get("url", ""))
+    if not (release_url.startswith("https://") or release_url.startswith("http://")):
+        release_url = ""
+
     return {
         "checked": True,
         "current": current_version,
@@ -78,7 +87,7 @@ def check_update(current_version: str = __version__, url: str = VERSION_URL,
         "update_available": update_available,
         "security": bool(data.get("security", False)),
         "headline": str(data.get("headline", "")),
-        "url": str(data.get("url", "")),
+        "url": release_url,
     }
 
 

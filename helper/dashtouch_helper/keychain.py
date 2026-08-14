@@ -15,17 +15,27 @@ class KeychainError(Exception):
     pass
 
 
-def _run(args: list[str]) -> str:
+def _run(args: list[str], input_value: str | None = None) -> str:
     try:
         return subprocess.run(args, check=True, capture_output=True,
-                              text=True).stdout
+                              text=True, input=input_value).stdout
     except subprocess.CalledProcessError as e:
         raise KeychainError(f"{args[1]} failed: {e.stderr.strip()}") from e
 
 
 def _set(service: str, account: str, value: str) -> None:
+    # The secret is deliberately NOT on the argv line — anything passed to
+    # `-w` directly would sit in `ps` output, readable by any local process,
+    # for as long as `security` runs. With `-w` as the LAST argument and no
+    # value after it, `security` prompts for the password instead of taking
+    # it from argv; piping it in on stdin (this process has no controlling
+    # terminal, so `security` falls back to reading stdin) keeps it out of
+    # argv entirely. It prompts twice — password, then a retype
+    # confirmation — so both copies have to go over stdin, newline-
+    # terminated, or the confirmation read hits EOF and the write fails.
     _run(["security", "add-generic-password", "-U",
-          "-s", service, "-a", account, "-w", value])
+          "-s", service, "-a", account, "-w"],
+         input_value=f"{value}\n{value}\n")
 
 
 def _get(service: str, account: str) -> str:
@@ -47,4 +57,14 @@ def set_pairing_key(serial: str, key: bytes) -> None:
 
 
 def get_pairing_key(serial: str) -> bytes:
-    return bytes.fromhex(_get(SERVICE_PAIRING, serial))
+    raw = _get(SERVICE_PAIRING, serial)
+    try:
+        return bytes.fromhex(raw)
+    except ValueError as e:
+        # A corrupt Keychain entry must not escape as a bare ValueError:
+        # daemon.py only catches KeychainError, and under launchd's
+        # KeepAlive an uncaught exception here means the helper crash-loops
+        # with no useful diagnostic.
+        raise KeychainError(
+            "the pairing key in your Keychain is corrupt (not valid hex) — "
+            "run `dashtouch pairing` to make a fresh one") from e

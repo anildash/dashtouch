@@ -13,8 +13,8 @@
   <key>WorkingDirectory</key><string>{workdir}</string>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>/tmp/dashtouch-helper.log</string>
-  <key>StandardErrorPath</key><string>/tmp/dashtouch-helper.err</string>
+  <key>StandardOutPath</key><string>{logdir}/helper.log</string>
+  <key>StandardErrorPath</key><string>{logdir}/helper.err</string>
   <key>EnvironmentVariables</key>
   <dict><key>PYTHONUNBUFFERED</key><string>1</string></dict>
 </dict>

@@ -43,7 +43,7 @@ The firmware can't talk to the sensor. In order:
   `.venv/bin/dashtouch install-agent` to make it permanent.
 - A **steady yellow ring** after the green means exactly this: the device
   matched you, then couldn't reach the Mac side.
-- Check the log: `cat /tmp/dashtouch-helper.log`
+- Check the log: `cat ~/Library/Logs/dashtouch/helper.log`
 
 ## It types the wrong password
 

@@ -22,6 +22,10 @@ REPO = pathlib.Path(__file__).parents[2]
 SECRETS_PATH = REPO / "firmware" / "dashtouch" / "secrets.h"
 FQBN = "esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default"
 PLIST_PATH = pathlib.Path.home() / "Library" / "LaunchAgents" / "com.dashtouch.helper.plist"
+# Not shared, world-readable /tmp — launchd's stdout/stderr log for the
+# helper (which includes the web UI's origin) lives under the user's own
+# Library, same as the plist itself.
+LOG_DIR = pathlib.Path.home() / "Library" / "Logs" / "dashtouch"
 
 
 def write_secrets(key: bytes, path: pathlib.Path) -> None:
@@ -33,11 +37,16 @@ def write_secrets(key: bytes, path: pathlib.Path) -> None:
         "#pragma once\n"
         "// Written by `dashtouch setup`. Never commit this file.\n"
         "static const uint8_t PAIRING_KEY[32] = {\n" + body + "\n};\n")
+    # Same plaintext pairing key that lives in the Keychain — keep this
+    # third copy owner-readable only.
+    path.chmod(0o600)
 
 
 def render_plist(python: str, workdir: str) -> str:
     tmpl = (pathlib.Path(__file__).parent / "launchd_template.plist").read_text()
-    return tmpl.replace("{python}", python).replace("{workdir}", workdir)
+    return (tmpl.replace("{python}", python)
+                .replace("{workdir}", workdir)
+                .replace("{logdir}", str(LOG_DIR)))
 
 
 def find_and_flash(prompt_prefix: str = "") -> str:
@@ -330,6 +339,7 @@ def cmd_doctor(args) -> int:
 def cmd_install_agent(args) -> int:
     """Install the helper as a launch agent using the modern launchctl API."""
     PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
     PLIST_PATH.write_text(render_plist(sys.executable, str(REPO)))
 
     uid = os.getuid()
@@ -358,7 +368,7 @@ def cmd_install_agent(args) -> int:
         return 1
 
     print("Installed and started. It now runs whenever you're logged in.")
-    print("Logs: /tmp/dashtouch-helper.log")
+    print(f"Logs: {LOG_DIR / 'helper.log'}")
     print()
     print("To stop it later, run:")
     print(f"  launchctl bootout gui/$(id -u)/com.dashtouch.helper")

@@ -346,8 +346,11 @@ class Daemon:
     # -- I/O ----------------------------------------------------------
     def send_command(self, line: str) -> None:
         if line.startswith("PW "):
-            n = len(line[3:]) // 2
-            self.log_event("host", f"PW <one-time encrypted password, {n} bytes>")
+            # A fixed placeholder — no byte count. The ciphertext length is
+            # `len(password) + 28` (nonce/tag overhead), so logging it
+            # discloses the password's length even though the plaintext
+            # never does.
+            self.log_event("host", "PW <one-time encrypted password>")
         else:
             self.log_event("host", line)
         with self._write_lock:
@@ -357,10 +360,19 @@ class Daemon:
                     self._ser.flush()
                 except (OSError, serial_link.serial.SerialException):
                     self._ser = None
+                    self.state["connected"] = False
 
     def run_forever(self) -> None:
         url = webui.start(self)
-        print(f"web UI: {url}")
+        if sys.stdout.isatty():
+            print(f"web UI: {url}")
+        else:
+            # Not a terminal — almost certainly launchd, whose log file is
+            # not private the way ~/.dashtouch/webui-url is. Never write
+            # the token where a shared, world-readable log can pick it up.
+            origin = url.split("?")[0]
+            print(f"web UI: {origin}")
+            print(f"(the full link, with your session token, is in {webui.URL_PATH})")
         while True:
             port = self.port or serial_link.find_port()
             if port is None:
@@ -374,9 +386,24 @@ class Daemon:
                 self.log_event("helper", f"helper listening on {port}")
                 self._on_connect()
                 while True:
+                    if self._ser is None:
+                        # A write failure elsewhere (send_command) already
+                        # dropped the port and marked us disconnected; stop
+                        # reading here and let the outer loop look for the
+                        # board again, instead of calling read_line(None).
+                        break
                     line = serial_link.read_line(self._ser)
                     if line is not None:
-                        self.handle_line(line)
+                        try:
+                            self.handle_line(line)
+                        except Exception as e:
+                            # A bug anywhere in handle_line must not kill
+                            # the daemon — under launchd's KeepAlive an
+                            # uncaught exception here is a crash-loop with
+                            # no diagnostic. Log it and keep reading.
+                            msg = f"error handling line {line!r}: {e}"
+                            print(msg, file=sys.stderr)
+                            self.log_event("helper", msg)
             except (OSError, serial_link.serial.SerialException):
                 self.state["connected"] = False
                 with self._write_lock:

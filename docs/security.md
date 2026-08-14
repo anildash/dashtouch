@@ -38,7 +38,12 @@ with both devices, a soldering iron, and an afternoon could extract it
 and impersonate the gadget to your Mac. The ESP32 chip supports one-way
 hardware protections (secure boot, flash encryption) that close this;
 they're permanent and unforgiving, so we document them but don't burn
-them for you.
+them for you. There's a third copy of that same key, in plaintext, on
+the Mac side too: `firmware/dashtouch/secrets.h`, written by
+`dashtouch setup`/`dashtouch pairing` right before flashing. It's
+gitignored and never leaves your machine, and it's owner-read-only
+(mode `0600`) — but if someone has file access to your Mac, that file
+is as good as the Keychain entry.
 
 **The fingerprint sensor itself is the trusting sort.** The sensor and
 the QT Py chat over a plain serial line with no authentication — that's
@@ -51,7 +56,16 @@ the electronics in epoxy so tampering means destroying it.
 a random website you have open can't quietly enroll a finger.
 
 **Replays don't work.** Every match event is numbered and signed;
-yesterday's captured USB traffic can't be replayed today.
+yesterday's captured USB traffic can't be replayed today.[^replay-boot]
+
+[^replay-boot]: One precision note: a `BOOT` line from the device resets
+    the Mac side's replay counter, since a real reboot legitimately
+    restarts numbering from zero. Someone who can *write* to the serial
+    port could send a fake `BOOT` to rewind that window and replay a
+    captured match event — but the reply is still a fresh, encrypted
+    password payload keyed to the original nonce, undecryptable without
+    the pairing key, and the real device ignores it. No password is
+    disclosed either way.
 
 ## The one thing that talks to the internet
 
@@ -63,11 +77,12 @@ exactly one exception, and it's opt-in every single time.
 and the helper — never the browser — fetches one file:
 `https://raw.githubusercontent.com/anildash/dashtouch/main/version.json`.
 It reads the version number out of that file and compares it, locally, to
-the version you're running. That's the entire request. Nothing about you
-or your machine goes with it: no identifiers, no version number tucked
-into the URL, no telemetry, no account, no cookies. It's the exact same
-GET request your browser would make if you typed that URL in yourself
-and hit enter.
+the version you're running. That's almost the entire request: it does
+carry a `User-Agent: dashtouch-helper` header, so GitHub can tell this
+came from Dashboard Touch rather than a browser — no other identifiers,
+no version number tucked into the URL, no telemetry, no account, no
+cookies. Other than that header, it's the same GET request your browser
+would make if you typed that URL in yourself and hit enter.
 
 **It only ever happens when you click the button.** There is no check at
 startup, no check on a schedule, no check when this page loads, no

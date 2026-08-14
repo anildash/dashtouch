@@ -446,6 +446,23 @@ def test_check_update_already_current(monkeypatch):
     assert result["update_available"] is False
 
 
+def test_check_update_rejects_non_http_url_scheme(monkeypatch):
+    # version.json is remote content. Its "url" field is rendered as a link
+    # on the token-bearing page, and the client's escapeHtml doesn't
+    # constrain the scheme — a "javascript:" URL would survive it and
+    # execute. The server must not hand a non-http(s) URL to the client.
+    payload = json.dumps({
+        "version": "9.9.9",
+        "security": False,
+        "headline": "",
+        "url": "javascript:alert(document.cookie)",
+    }).encode()
+    monkeypatch.setattr(webui.urllib.request, "urlopen", lambda *a, **k: FakeResponse(payload))
+    result = webui.check_update(current_version="0.1.0")
+    assert result["checked"] is True
+    assert result["url"] == ""
+
+
 def test_check_update_security_flag_passed_through(monkeypatch):
     payload = json.dumps({"version": "0.2.0", "security": True,
                            "headline": "Fixes a thing.", "url": "https://x"}).encode()

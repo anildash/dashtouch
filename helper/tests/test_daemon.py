@@ -5,6 +5,7 @@ import pathlib
 import time
 from unittest import mock
 
+import pytest
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from dashtouch_helper import daemon, protocol
@@ -115,7 +116,9 @@ def test_send_command_redacts_pw_payload():
     d.send_command("PW abc123")
     host_events = [e for e in d.events if e["dir"] == "host"]
     assert len(host_events) == 1
-    assert host_events[0]["text"] == "PW <one-time encrypted password, 3 bytes>"
+    # Fixed placeholder, no byte count — the ciphertext length otherwise
+    # discloses the password's length.
+    assert host_events[0]["text"] == "PW <one-time encrypted password>"
     assert "abc123" not in host_events[0]["text"]
 
 
@@ -526,3 +529,121 @@ def test_old_firmware_never_sends_settings_ok_state_stays_none():
     d = make_daemon()
     d.handle_line("STATUS_OK proto=1 fw=dt-0.1.0 sensor=ok cap=200")
     assert d.state["settings"] is None
+
+
+# -- security review fixes ---------------------------------------------------
+
+def test_send_command_write_failure_marks_disconnected():
+    # A serial write failure must clear both `_ser` AND `connected` — leaving
+    # `connected` True while `_ser` is None used to send the next read_line
+    # call straight into an uncaught AttributeError.
+    d = make_daemon()
+    d.state["connected"] = True
+
+    class BoomSerial:
+        def write(self, b):
+            raise OSError("gone")
+
+        def flush(self):
+            pass
+
+    d._ser = BoomSerial()
+    d.send_command("STATUS")
+    assert d._ser is None
+    assert d.state["connected"] is False
+
+
+def test_run_forever_prints_bare_url_when_not_a_tty(monkeypatch, capsys):
+    # Under launchd, stdout is a log file, not a terminal — the tokened URL
+    # must never land there. Only the bare origin should be printed.
+    d = make_daemon()
+    monkeypatch.setattr(daemon.webui, "start",
+                        lambda self: "http://127.0.0.1:3274/?token=SECRETTOKEN")
+    monkeypatch.setattr(daemon.serial_link, "find_port", lambda: "/dev/fake")
+    monkeypatch.setattr(daemon.serial_link, "open_port", lambda port: mock.Mock())
+    monkeypatch.setattr(daemon.sys.stdout, "isatty", lambda: False)
+
+    def boom(ser):
+        raise RuntimeError("stop test loop")
+
+    monkeypatch.setattr(daemon.serial_link, "read_line", boom)
+    with pytest.raises(RuntimeError):
+        d.run_forever()
+    out = capsys.readouterr().out
+    assert "SECRETTOKEN" not in out
+    assert "http://127.0.0.1:3274" in out
+    assert str(daemon.webui.URL_PATH) in out
+
+
+def test_run_forever_prints_full_url_when_a_tty(monkeypatch, capsys):
+    d = make_daemon()
+    monkeypatch.setattr(daemon.webui, "start",
+                        lambda self: "http://127.0.0.1:3274/?token=SECRETTOKEN")
+    monkeypatch.setattr(daemon.serial_link, "find_port", lambda: "/dev/fake")
+    monkeypatch.setattr(daemon.serial_link, "open_port", lambda port: mock.Mock())
+    monkeypatch.setattr(daemon.sys.stdout, "isatty", lambda: True)
+
+    def boom(ser):
+        raise RuntimeError("stop test loop")
+
+    monkeypatch.setattr(daemon.serial_link, "read_line", boom)
+    with pytest.raises(RuntimeError):
+        d.run_forever()
+    out = capsys.readouterr().out
+    assert "SECRETTOKEN" in out
+
+
+def test_run_forever_survives_exception_in_handle_line(monkeypatch):
+    # A bug anywhere in handle_line used to escape run_forever's narrow
+    # (OSError, SerialException) handler and kill the daemon outright —
+    # a crash-loop under launchd's KeepAlive. It must now be caught, logged,
+    # and the loop must keep reading.
+    d = make_daemon()
+    monkeypatch.setattr(daemon.webui, "start", lambda self: "http://127.0.0.1:3274/?token=T")
+    monkeypatch.setattr(daemon.serial_link, "find_port", lambda: "/dev/fake")
+    monkeypatch.setattr(daemon.serial_link, "open_port", lambda port: mock.Mock())
+
+    lines = iter(["BOGUS", None])
+
+    def fake_read_line(ser):
+        try:
+            return next(lines)
+        except StopIteration:
+            raise RuntimeError("stop test loop")
+
+    monkeypatch.setattr(daemon.serial_link, "read_line", fake_read_line)
+
+    def boom(line):
+        raise ValueError("kaboom")
+
+    monkeypatch.setattr(d, "handle_line", boom)
+    with pytest.raises(RuntimeError):
+        d.run_forever()
+    helper_events = [e for e in d.events if e["dir"] == "helper"]
+    assert any("kaboom" in e["text"] for e in helper_events)
+
+
+def test_run_forever_stops_reading_when_ser_dropped_mid_loop(monkeypatch):
+    # Mirrors the scenario a write failure creates: `_ser` goes to None
+    # mid-session. The inner loop must notice and hand control back to the
+    # outer reconnect loop instead of calling read_line(None).
+    d = make_daemon()
+    monkeypatch.setattr(daemon.webui, "start", lambda self: "http://127.0.0.1:3274/?token=T")
+
+    ports = iter(["/dev/fake", None])
+    monkeypatch.setattr(daemon.serial_link, "find_port",
+                        lambda: next(ports, "STOP"))
+    monkeypatch.setattr(daemon.serial_link, "open_port", lambda port: mock.Mock())
+
+    def fake_read_line(ser):
+        d._ser = None  # simulate a write failure nulling it out
+        return None
+
+    monkeypatch.setattr(daemon.serial_link, "read_line", fake_read_line)
+
+    def boom(*a, **k):
+        raise RuntimeError("stop test loop")
+
+    monkeypatch.setattr(daemon.time, "sleep", boom)
+    with pytest.raises(RuntimeError):
+        d.run_forever()
