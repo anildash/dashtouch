@@ -329,8 +329,15 @@ function updateRing(state) {
       ring.style.removeProperty("--ring-idle-color-rgb");
       ring.classList.add("ring--idle-off");
     } else {
-      ring.style.setProperty("--ring-idle-color", `var(${colorDef.cssVar})`);
-      ring.style.setProperty("--ring-idle-color-rgb", `var(${colorDef.cssVar}-rgb)`);
+      // Resolve the tokens to literal values rather than passing a var()
+      // reference through a custom property — that extra indirection does
+      // not resolve reliably, and left the ring rendering dark.
+      const root = getComputedStyle(document.documentElement);
+      ring.style.setProperty(
+        "--ring-idle-color", root.getPropertyValue(colorDef.cssVar).trim());
+      ring.style.setProperty(
+        "--ring-idle-color-rgb",
+        root.getPropertyValue(`${colorDef.cssVar}-rgb`).trim());
       if (breathing) ring.classList.add("ring--idle-breathing");
     }
   }
