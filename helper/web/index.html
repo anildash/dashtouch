@@ -7,6 +7,14 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <svg aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
+    <symbol id="fp-mark" viewBox="0 0 16 16">
+      <path d="M5.95 13.64 A6 6 0 0 1 5.95 2.36" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
+      <path d="M6.46 12.23 A4.5 4.5 0 0 1 6.46 3.77" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
+      <path d="M6.97 10.82 A3 3 0 0 1 6.97 5.18" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
+      <path d="M7.6 7c.9.4.9 1.6 0 2" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
+    </symbol>
+  </svg>
   <main>
     <h1>Dashboard Touch</h1>
     <div id="banner" class="banner" role="alert" hidden></div>
@@ -35,8 +43,8 @@
           </ul>
         </section>
 
-        <section class="card" id="checkup-card">
-          <h2>Checkup</h2>
+        <section class="checkup-section" id="checkup-section">
+          <p class="eyebrow">Checkup</p>
           <p class="hint">Is the whole chain set up right, end to end? This
           updates itself as you fix things.</p>
           <ul class="checkup" id="checkup"></ul>
@@ -58,8 +66,16 @@
           <ul id="slots"></ul>
         </section>
 
-        <section class="card" id="help">
-          <h2>Help</h2>
+        <div class="tool-strip" id="tool-strip">
+          <div class="tab-row" role="tablist" aria-label="Tools">
+            <button type="button" class="tab-btn" id="tab-btn-help" role="tab"
+              aria-selected="false" aria-controls="tab-panel-help">Help</button>
+            <button type="button" class="tab-btn" id="tab-btn-debug" role="tab"
+              aria-selected="false" aria-controls="tab-panel-debug">Under the hood</button>
+          </div>
+
+          <div class="tab-panel" id="tab-panel-help" role="tabpanel"
+            aria-labelledby="tab-btn-help" tabindex="0" hidden>
           <ul class="help">
             <li><strong><a href="#help-no-purple">Ring (or this page) never turns purple?</a></strong> The sensor
             isn't talking. Check all six wires &mdash; especially the white one.
@@ -135,16 +151,16 @@
             &middot; <a href="https://github.com/anildash/dashtouch/blob/main/docs/troubleshooting.md" target="_blank" rel="noopener">Troubleshooting guide</a>
             &middot; <a href="https://github.com/anildash/dashtouch/blob/main/docs/security.md" target="_blank" rel="noopener">Is this thing safe?</a>
           </p>
-        </section>
+          </div>
 
-        <section class="card" id="debug">
-          <h2>Under the hood</h2>
-          <p class="hint">See every message crossing between your Mac and the
-          sensor, plus what this page just did &mdash; handy if something's not
-          working and you want to know why.</p>
-          <button id="debug-toggle">Show what's happening</button>
-          <div id="log"></div>
-        </section>
+          <div class="tab-panel" id="tab-panel-debug" role="tabpanel"
+            aria-labelledby="tab-btn-debug" tabindex="0" hidden>
+            <p class="hint">See every message crossing between your Mac and the
+            sensor, plus what this page just did &mdash; handy if something's not
+            working and you want to know why.</p>
+            <div id="log"></div>
+          </div>
+        </div>
       </div>
     </div>
   </main>

@@ -1,7 +1,75 @@
 const token = new URLSearchParams(location.search).get("token");
 let enrolling = false;
-let logVisible = false;
 let logInterval = null;
+
+// -- tool strip: Help / Under the hood open on demand, one at a time -------
+let activeTab = null; // "help" | "debug" | null
+// True once Help has auto-opened for the current run of trouble; reset when
+// the trouble clears so a fresh problem can auto-open it again.
+let helpAutoRevealed = false;
+
+function updateTabUI() {
+  const helpBtn = document.getElementById("tab-btn-help");
+  const debugBtn = document.getElementById("tab-btn-debug");
+  const helpPanel = document.getElementById("tab-panel-help");
+  const debugPanel = document.getElementById("tab-panel-debug");
+
+  helpBtn.classList.toggle("tab-btn--active", activeTab === "help");
+  helpBtn.setAttribute("aria-selected", String(activeTab === "help"));
+  helpPanel.hidden = activeTab !== "help";
+
+  debugBtn.classList.toggle("tab-btn--active", activeTab === "debug");
+  debugBtn.setAttribute("aria-selected", String(activeTab === "debug"));
+  debugPanel.hidden = activeTab !== "debug";
+}
+
+function openTab(name) {
+  if (activeTab === "debug" && name !== "debug") stopLogPolling();
+  activeTab = name;
+  updateTabUI();
+  if (name === "debug") startLogPolling();
+}
+
+function closeTab() {
+  if (activeTab === "debug") stopLogPolling();
+  activeTab = null;
+  updateTabUI();
+}
+
+function toggleTab(name) {
+  if (activeTab === name) closeTab();
+  else openTab(name);
+}
+
+document.getElementById("tab-btn-help").onclick = () => toggleTab("help");
+document.getElementById("tab-btn-debug").onclick = () => toggleTab("debug");
+
+document.querySelectorAll('.tab-row [role="tab"]').forEach((btn, i, all) => {
+  btn.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const dir = e.key === "ArrowRight" ? 1 : -1;
+    all[(i + dir + all.length) % all.length].focus();
+  });
+});
+
+// Any link into the Help entries (the static list above, or a Checkup "How
+// to fix" link) needs the Help panel open before the browser's own hash
+// navigation tries to scroll to it — the target is invisible while [hidden].
+document.addEventListener("click", (e) => {
+  const a = e.target.closest('a[href^="#help-"]');
+  if (!a) return;
+  if (activeTab !== "help") openTab("help");
+});
+
+function revealHelpForHash() {
+  if (!location.hash.startsWith("#help-")) return;
+  openTab("help");
+  requestAnimationFrame(() => {
+    const el = document.getElementById(location.hash.slice(1));
+    if (el) el.scrollIntoView({block: "center"});
+  });
+}
 
 if (!token) {
   const banner = document.getElementById("banner");
@@ -94,8 +162,8 @@ function computeRingState(s) {
   return {cls: "ring--idle", label: "Ready"};
 }
 
-function updateRing(s) {
-  const {cls, label} = computeRingState(s);
+function updateRing(state) {
+  const {cls, label} = state;
   const ring = document.getElementById("ring");
   ring.classList.remove(...RING_CLASSES);
   ring.classList.add(cls);
@@ -105,6 +173,12 @@ function updateRing(s) {
   } else {
     ringLabel.textContent = label;
   }
+}
+
+// A match flash is "live" for FLASH_MS after a TYPED event — used to tint
+// the matching finger row's fingerprint mark in the list below.
+function isMatchFlashActive() {
+  return flashCls === "ring--match" && (Date.now() - flashStartedAt < FLASH_MS);
 }
 
 // -- slot dropdown: truthful list of FREE slots, from the sensor's own ----
@@ -152,11 +226,24 @@ function updateSlotList(s) {
   for (const k of Object.keys(labels)) seen.add(k);
   const rows = Array.from(seen, Number).sort((a, b) => a - b);
 
+  const matchSlot = s.last_match ? s.last_match.slot : null;
+  const matchLive = isMatchFlashActive();
+
   const ul = document.getElementById("slots");
   ul.innerHTML = "";
   for (const slot of rows) {
     const label = labels[String(slot)];
     const li = document.createElement("li");
+
+    const fp = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    fp.setAttribute("class", "fp-mark" + (matchLive && slot === matchSlot ? " fp-mark--match" : ""));
+    fp.setAttribute("viewBox", "0 0 16 16");
+    fp.setAttribute("aria-hidden", "true");
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", "#fp-mark");
+    fp.appendChild(use);
+    li.appendChild(fp);
+
     const num = document.createElement("span");
     num.className = "slot-num";
     num.textContent = String(slot);
@@ -247,7 +334,7 @@ function updateCheckup(s) {
     if (row.ok === false) failing = true;
 
     const li = document.createElement("li");
-    li.className = "checkup-row";
+    li.className = "checkup-row" + (row.ok === false ? " checkup-row--fail" : "");
 
     const dot = document.createElement("span");
     dot.className = "dot " + (row.ok === true ? "dot--green"
@@ -272,6 +359,8 @@ function updateCheckup(s) {
   }
 
   document.getElementById("health-summary").hidden = !failing;
+  document.getElementById("checkup-section").classList.toggle("checkup-section--alert", failing);
+  return failing;
 }
 
 async function refresh() {
@@ -291,10 +380,29 @@ async function refresh() {
     s.sensor === "ok" ? "Sensor: happy"
                       : s.sensor === "fail" ? "Sensor: not answering — check the wiring"
                       : "";
-  document.getElementById("capline").textContent = s.cap ? `${s.cap} finger slots` : "";
+  if (s.cap) {
+    const used = (s.slots_used || []).length;
+    const usedText = used === 0 ? "none used yet" : used === 1 ? "1 used" : `${used} used`;
+    document.getElementById("capline").textContent = `${s.cap} finger slots (${usedText})`;
+  } else {
+    document.getElementById("capline").textContent = "";
+  }
 
-  updateRing(s);
-  updateCheckup(s);
+  // Single call site for computeRingState — it's also where lastSeq
+  // advances, so it must run exactly once per poll.
+  const ringState = computeRingState(s);
+  updateRing(ringState);
+  const failing = updateCheckup(s);
+
+  const trouble = failing || ringState.cls === "ring--helper" || ringState.cls === "ring--boot-fail";
+  if (trouble) {
+    if (!helpAutoRevealed) {
+      helpAutoRevealed = true;
+      if (activeTab !== "help") openTab("help");
+    }
+  } else {
+    helpAutoRevealed = false;
+  }
 
   if (enrolling && s.enroll_stage) {
     const nice = {
@@ -327,7 +435,7 @@ document.getElementById("enroll").onclick = async () => {
     if (response.ok) {
       enrolling = true;
       // Restart log polling if a mutation succeeded
-      if (logVisible && !logInterval && token) {
+      if (activeTab === "debug" && !logInterval && token) {
         fetchLog();
         logInterval = setInterval(fetchLog, 1000);
       }
@@ -371,26 +479,19 @@ async function fetchLog() {
   }
 }
 
-document.getElementById("debug-toggle").onclick = () => {
-  logVisible = !logVisible;
-  const logEl = document.getElementById("log");
-  const btn = document.getElementById("debug-toggle");
-  if (logVisible) {
-    logEl.style.display = "block";
-    btn.textContent = "Hide";
-    if (token) {
-      fetchLog();
-      logInterval = setInterval(fetchLog, 1000);
-    }
-  } else {
-    logEl.style.display = "none";
-    btn.textContent = "Show what's happening";
-    if (logInterval) {
-      clearInterval(logInterval);
-      logInterval = null;
-    }
-  }
-};
+function startLogPolling() {
+  if (logInterval || !token) return;
+  fetchLog();
+  logInterval = setInterval(fetchLog, 1000);
+}
+
+function stopLogPolling() {
+  if (logInterval) clearInterval(logInterval);
+  logInterval = null;
+}
+
+revealHelpForHash();
+window.addEventListener("hashchange", revealHelpForHash);
 
 setInterval(refresh, 800);
 refresh();

@@ -177,18 +177,36 @@ a:hover { opacity: .85; }
 .dot--cyan { background: var(--aura-cyan); }
 .dot--muted { background: var(--muted); }
 
-/* -- checkup -------------------------------------------------------- */
-.checkup { list-style: none; margin: 0; padding: 0; font-size: .85rem; }
+/* -- checkup: subordinate by default, regains weight when failing ---- */
+.checkup-section {
+  margin-top: 20px;
+  padding: 1rem 0 0 .85rem;
+  border-top: 1px solid var(--line);
+  border-left: 3px solid transparent;
+}
+.checkup-section--alert { border-left-color: var(--aura-red); }
+.checkup-section .eyebrow {
+  margin: 0 0 .4rem;
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.checkup-section .hint { font-size: .8rem; margin: 0 0 .5rem; }
+
+.checkup { list-style: none; margin: 0; padding: 0; font-size: .8rem; }
 .checkup-row {
   display: flex;
   align-items: baseline;
   gap: .55rem;
-  padding: .5rem 0;
+  padding: .45rem 0;
   border-top: 1px solid var(--line);
 }
-.checkup-row:first-child { border-top: 0; padding-top: .25rem; }
+.checkup-row:first-child { border-top: 0; padding-top: .2rem; }
 .checkup-row .dot { align-self: center; }
-.checkup-text { color: var(--text); flex: 1; }
+.checkup-text { color: var(--muted); flex: 1; }
+.checkup-row--fail .checkup-text { color: var(--text); font-weight: 500; }
 .checkup-fix {
   font-size: .8rem;
   white-space: nowrap;
@@ -295,6 +313,48 @@ button:hover { filter: brightness(1.08); }
 #slots li .rename-btn { margin-left: auto; }
 #slots li .remove-btn { margin-left: .5rem; }
 
+.fp-mark {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--muted);
+  transition: color .3s ease;
+}
+.fp-mark--match { color: var(--aura-green); }
+
+/* -- tool strip: Help / Under the hood, revealed on demand ------------ */
+.tool-strip { margin-top: 4px; }
+.tab-row {
+  display: flex;
+  gap: 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.tab-btn {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: .95rem;
+  padding: .6rem .1rem;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+.tab-btn:hover { color: var(--text); filter: none; }
+.tab-btn--active {
+  color: var(--text);
+  border-bottom-color: var(--aura-purple);
+}
+.tab-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 14px 14px;
+  padding: 1.25rem 1.25rem 1.5rem;
+}
+
 /* -- help ------------------------------------------------------------- */
 .help { color: var(--muted); padding-left: 1.1rem; margin: 0; }
 .help li { margin-bottom: .6rem; }
@@ -343,14 +403,7 @@ code {
 .help-entry:target { animation: help-pulse 2s ease-out; }
 
 /* -- debug feed -------------------------------------------------------- */
-#debug-toggle {
-  background: var(--ink);
-  border: 1px solid var(--line);
-  color: var(--text);
-  font-weight: 500;
-}
 #log {
-  display: none;
   margin-top: .75rem;
   padding: .6rem .75rem;
   background: var(--ink);
