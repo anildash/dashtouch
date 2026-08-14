@@ -28,6 +28,7 @@ service `DashboardTouch-pairing`, account = board serial. Device copy:
 | `ERR helper_timeout` | no valid `PW` within 3000 ms of `EV` |
 | `ERR bad_response` | `PW` present but failed to decrypt/authenticate |
 | `PONG`, `STATUS_OK ...`, `ENROLL_*`, `DELETE_*` | replies to host commands |
+| `PAUSE_OK 0` | *also* sent unsolicited — never in reply to any host command — the instant the 90s auto-resume fires; see Pause below |
 
 `EV` fields: `nonce` = 32 hex chars (16 random bytes, fresh per event);
 `counter` = decimal uint32, strictly increasing from 1 within a boot;
@@ -74,6 +75,18 @@ window (every 30s) for as long as a naming/renaming field stays open, and
 to send `PAUSE 0` itself on save/cancel/close. The 90s timeout only matters
 when the page can't get a message through at all (crashed helper, closed
 tab, dropped connection).
+
+This check runs from `loop()`, unconditionally, every iteration — before
+the sensor-health gate, the poll throttle, and the pause branch itself, so
+nothing can starve it. When it fires, the firmware doesn't just clear the
+flag internally: it prints `PAUSE_OK 0` on the serial link, unprompted,
+the same instant. Nobody has to ask `STATUS` to find out — the host learns
+the sensor is scanning again within one loop tick. This matters because the
+host only ever learns `paused` from a `PAUSE_OK` reply or a `STATUS_OK`
+line; without the unsolicited announcement, a helper that isn't actively
+polling would keep believing the device is paused indefinitely after a
+self-resume, which is the same false-status shape as `fp_swap`'s
+`reboot_required` state.
 
 ## Response encryption
 

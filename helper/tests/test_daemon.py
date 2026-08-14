@@ -559,6 +559,20 @@ def test_pause_ok_0_sets_paused_false():
     assert d.state["paused"] is False
 
 
+def test_unsolicited_pause_ok_0_from_firmware_auto_resume_updates_state():
+    # The firmware's 90s auto-resume announces PAUSE_OK 0 on its own —
+    # never in reply to a host PAUSE command. handle_line() doesn't (and
+    # shouldn't) distinguish solicited from unsolicited lines, so this must
+    # update state the same way a reply would, with no request in flight.
+    d = make_daemon()
+    d.state["paused"] = True
+    assert d._ser.written == []  # nothing sent by the daemon first
+    d.handle_line("PAUSE_OK 0")
+    assert d.state["paused"] is False
+    device_events = [e for e in d.events if e["dir"] == "device"]
+    assert any("PAUSE_OK 0" in e["text"] for e in device_events)
+
+
 def test_status_ok_parses_paused_true():
     d = make_daemon()
     d.handle_line("STATUS_OK proto=1 fw=dt-0.1.0 sensor=ok cap=200 paused=1")

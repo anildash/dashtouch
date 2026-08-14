@@ -7,10 +7,19 @@ void linkHandleCommand(const String& line);
 bool linkSelfTest();
 
 // True while the host has paused matching (e.g. a naming/renaming field is
-// focused in the web UI). Also enforces the 90s auto-resume: call this from
-// loop() every tick, not just when STATUS is requested, so a dead helper
-// can't leave the sensor deaf forever. See docs/protocol.md.
+// focused in the web UI). A read-only query — it does NOT itself enforce
+// the auto-resume timeout (linkTickPause() owns that), so calling this
+// from STATUS or the loop's scan gate can never race the tick below.
 bool linkIsPaused();
+
+// Auto-resume tick. Call this from loop() unconditionally, every single
+// iteration, before any other gate (g_sensorOk, the poll throttle, the
+// pause branch itself) — nothing may skip it, or a paused device could get
+// stuck past its 90s deadline with no way back. When the deadline passes
+// with no PAUSE 1 refresh, this clears the pause AND announces it
+// unsolicited on the serial link (`PAUSE_OK 0`), so the helper learns
+// about the resume without having to ask. See docs/protocol.md.
+void linkTickPause();
 
 // Set by the .ino; invoked for ENROLL/DELETE commands.
 extern void (*linkOnEnroll)(uint16_t slot);

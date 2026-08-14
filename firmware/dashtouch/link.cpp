@@ -211,10 +211,19 @@ void linkHandleCommand(const String& line) {
 }
 
 bool linkIsPaused() {
+  return s_paused;
+}
+
+void linkTickPause() {
   if (s_paused && millis() >= s_pauseDeadline) {
     s_paused = false;  // auto-resume: no refresh arrived in time
+    // Unsolicited — the firmware decided this on its own, not in reply to
+    // a host command, so the host has to be told rather than asked. Same
+    // line shape as a host-initiated PAUSE 0's reply, so the helper's
+    // existing PAUSE_OK parsing picks it up with no special-casing.
+    Serial.println("PAUSE_OK 0");
+    Serial.flush();
   }
-  return s_paused;
 }
 
 bool linkSelfTest() {

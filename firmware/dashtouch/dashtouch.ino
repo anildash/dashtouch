@@ -229,6 +229,13 @@ void setup() {
 void loop() {
   pollSerialCommands();
 
+  // Unconditional, every iteration, before any gate below: this is what
+  // guarantees a pause can never outlive its 90s deadline. A version of
+  // this that only ran inside the g_sensorOk/poll-throttle gate (or worse,
+  // only as a side effect of asking "are we paused?") could get starved by
+  // exactly those gates — see docs/protocol.md's Pause section.
+  linkTickPause();
+
   if (!g_sensorOk || millis() - s_lastPoll < DT_POLL_MS) {
     delay(5);
     return;
@@ -237,9 +244,9 @@ void loop() {
 
   // Paused (e.g. a naming/renaming field is focused in the web UI): skip
   // the whole match scan — no GenImg poll, no ring change, no EV — so the
-  // device can't type a password into a text field. linkIsPaused() also
-  // auto-resumes after 90s of no PAUSE 1 refresh, so a dead helper can't
-  // leave the sensor deaf forever.
+  // device can't type a password into a text field. The 90s auto-resume
+  // (linkTickPause(), above) is a dead helper's/closed tab's backstop, not
+  // the normal path off this state.
   if (linkIsPaused()) {
     delay(5);
     return;
