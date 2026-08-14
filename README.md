@@ -8,7 +8,18 @@ yourself from about $25 of parts, and you get to decide exactly where the
 sensor lives: your desk, your monitor stand, a drawer front you drilled
 one hole in.
 
-*(Photo: your build here.)*
+![The Dashboard Touch helper page: a glowing purple ring showing the device
+is ready, a row of enrolled fingers, and a setup checklist with everything
+green.](docs/images/web-ui.png)
+
+The page above is where you add fingers and check that everything's
+working. It runs on your own Mac — nothing leaves it.
+
+![A round fingerprint sensor set into a small wooden block, its ring lit
+purple, wired to a thumb-sized microcontroller on a workbench.](docs/images/device.jpg)
+
+*A work-in-progress build — the sensor gets mounted into the desk itself,
+but this is the whole gadget: one sensor, one microcontroller, six wires.*
 
 ## The honest part, first
 
