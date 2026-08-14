@@ -66,9 +66,6 @@
         <section class="card" id="settings-card">
           <h2>Settings</h2>
           <p class="hint settings-reading" id="settings-reading" hidden>Reading your gadget&rsquo;s settings&hellip;</p>
-          <p class="hint settings-old-fw" id="settings-old-fw" hidden>Your
-          gadget&rsquo;s firmware is older than these settings &mdash;
-          <a href="#help-reflash">reflash it to turn them on</a>.</p>
 
           <div class="settings-row" id="settings-color-row">
             <p class="settings-label">Resting color</p>
@@ -193,21 +190,6 @@
               flash step got skipped, so the board is still carrying the
               old key. See <a href="#help-rotate">changing your password or
               your pairing key</a> for the rotation &amp; reflash steps.</p>
-            </div>
-            <div class="help-entry" id="help-reflash">
-              <h3>Turning on the resting-ring and Return settings</h3>
-              <p>These settings live on the gadget itself, so a gadget
-              flashed before they existed won&rsquo;t answer them &mdash;
-              the section just stays disabled. Reflash it and they&rsquo;ll
-              work:</p>
-              <p><code>arduino-cli compile --fqbn
-              esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default
-              firmware/dashtouch</code></p>
-              <p><code>arduino-cli upload --fqbn
-              esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default
-              -p /dev/cu.usbmodemXXX firmware/dashtouch</code></p>
-              <p class="hint">Not sure of the port? <code>arduino-cli board
-              list</code> shows it.</p>
             </div>
             <div class="help-entry" id="help-autostart">
               <h3>About autostart</h3>

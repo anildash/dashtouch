@@ -15,10 +15,6 @@ let editingSlot = null;  // Tracks which finger is mid-edit to suppress re-rende
 // change is in flight; dropped in favor of the poll's own s.settings as
 // soon as one arrives, per "optimistic UI, corrected by the next poll."
 let settingsOverride = null;
-// Counts consecutive polls where the device is connected but settings is
-// still null — after a poll or two, that means old firmware that never
-// answers SETTINGS, not just a slow first reply.
-let settingsNullPolls = 0;
 
 // -- tool strip: Help / Under the hood / (on-demand) Update available,
 // open on demand, one at a time. Update available is a third tab that only
@@ -624,9 +620,7 @@ function renderSettings(s) {
   const disabled = !known || !token;
 
   document.getElementById("settings-reading").hidden =
-    known || !s.connected || settingsNullPolls >= 2;
-  document.getElementById("settings-old-fw").hidden =
-    known || settingsNullPolls < 2;
+    known || !s.connected;
 
   const active = settings || {idle_color: 3, idle_style: 1, press_enter: true};
 
@@ -793,16 +787,9 @@ async function refresh() {
   const used = (s.slots_used || []).length;
   document.getElementById("slots-counter").textContent = `${used} of ${cap} slots used`;
 
-  // Real settings data wins over any optimistic guess as soon as it
-  // arrives; otherwise count how long we've been connected without one
-  // (a poll or two of nulls means old firmware, not just a slow reply).
+  // Real settings data wins over any optimistic guess as soon as it arrives.
   if (s.settings) {
     settingsOverride = null;
-    settingsNullPolls = 0;
-  } else if (s.connected) {
-    settingsNullPolls++;
-  } else {
-    settingsNullPolls = 0;
   }
   renderSettings(s);
 

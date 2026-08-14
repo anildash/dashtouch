@@ -440,7 +440,7 @@ button:hover { filter: brightness(1.08); }
   color: var(--text);
   margin: 0 0 .2rem;
 }
-.settings-reading, .settings-old-fw { margin: 0 0 .75rem; }
+.settings-reading { margin: 0 0 .75rem; }
 .settings-collision-note { margin: .6rem 0 0; }
 
 .swatch-row {

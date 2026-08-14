@@ -84,10 +84,8 @@ The helper's page lives at port 3274 — DASH on a phone keypad, because of cour
 
 ```sh
 arduino-cli compile --fqbn esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default firmware/dashtouch
-arduino-cli upload --fqbn esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default -p /dev/cu.usbmodemXXX firmware/dashtouch
+arduino-cli upload --fqbn esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default -p $(arduino-cli board list | grep -o '/dev/cu.usbmodem[0-9]*' | head -1) firmware/dashtouch
 ```
-
-(`arduino-cli board list` shows your port.)
 </details>
 
 Follow the ring: **breathing white** means place your finger, **cyan**
