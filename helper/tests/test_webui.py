@@ -8,9 +8,9 @@ from dashtouch_helper import webui
 
 
 CANNED_HEALTH = [
-    {"id": "device", "label": "Device", "ok": True,
+    {"id": "device", "label": "Device", "ok": True, "state": "ok",
      "detail": "Connected — firmware dt-0.1.0", "fix": "help-not-connected"},
-    {"id": "password", "label": "Password", "ok": False,
+    {"id": "password", "label": "Password", "ok": False, "state": "bad",
      "detail": "Not set up yet", "fix": "help-password"},
 ]
 

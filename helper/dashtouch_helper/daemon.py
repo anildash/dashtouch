@@ -205,30 +205,34 @@ class Daemon:
             "id": "device",
             "label": "Device",
             "ok": connected,
+            "state": "ok" if connected else "bad",
             "detail": f"Connected — firmware {self.state['fw']}" if connected
                       else "Not connected",
             "fix": "help-not-connected",
         })
 
         if not connected:
-            sensor_ok, sensor_detail = None, "Can't check — connect the device first"
+            sensor_ok, sensor_state, sensor_detail = None, "off", "Can't check — connect the device first"
         elif self.state["sensor"] == "ok":
-            sensor_ok, sensor_detail = True, "Sensor's talking"
+            sensor_ok, sensor_state, sensor_detail = True, "ok", "Sensor's talking"
         else:
-            sensor_ok, sensor_detail = False, "Not answering — check the wiring"
+            sensor_ok, sensor_state, sensor_detail = False, "bad", "Not answering — check the wiring"
         rows.append({
             "id": "sensor",
             "label": "Sensor",
             "ok": sensor_ok,
+            "state": sensor_state,
             "detail": sensor_detail,
             "fix": "help-no-purple",
         })
 
+        password_ok = self._password is not None
         rows.append({
             "id": "password",
             "label": "Password",
-            "ok": self._password is not None,
-            "detail": "In your Keychain" if self._password is not None
+            "ok": password_ok,
+            "state": "ok" if password_ok else "bad",
+            "detail": "In your Keychain" if password_ok
                       else "Not set up yet",
             "fix": "help-rotate",
         })
@@ -236,25 +240,29 @@ class Daemon:
         n = self.state["hmac_failures"]
         if n > 0:
             pairing_ok = False
+            pairing_state = "bad"
             pairing_detail = f"{n} rejected signatures — the gadget and this Mac disagree"
         elif self.pairing_key is not None:
-            pairing_ok, pairing_detail = True, "Paired"
+            pairing_ok, pairing_state, pairing_detail = True, "ok", "Paired"
         else:
-            pairing_ok, pairing_detail = False, "Key missing"
+            pairing_ok, pairing_state, pairing_detail = False, "bad", "Key missing"
         rows.append({
             "id": "pairing",
             "label": "Pairing",
             "ok": pairing_ok,
+            "state": pairing_state,
             "detail": pairing_detail,
             "fix": "help-pairing",
         })
 
         plist = pathlib.Path.home() / "Library" / "LaunchAgents" / "com.dashtouch.helper.plist"
+        autostart_on = plist.exists()
         rows.append({
             "id": "autostart",
             "label": "Autostart",
             "ok": None,  # info row, never red — running by hand is a fine choice
-            "detail": "Runs automatically at login" if plist.exists()
+            "state": "ok" if autostart_on else "off",
+            "detail": "Runs automatically at login" if autostart_on
                       else "Only while you run it by hand",
             "fix": "help-autostart",
         })

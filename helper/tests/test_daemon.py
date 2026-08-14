@@ -212,6 +212,47 @@ def test_tampered_ev_counts_hmac_failure_and_fails_pairing_health():
     assert rows["pairing"]["ok"] is False
 
 
+# -- Task 7k: per-row state string alongside ok --------------------------
+
+def test_health_rows_carry_state_string():
+    d = make_daemon()
+    rows = {r["id"]: r for r in d.health()}
+    for row in rows.values():
+        assert "state" in row
+
+
+def test_disconnected_device_reports_bad_state():
+    d = daemon.Daemon("SER1")
+    d._ser = FakeSerial()
+    rows = {r["id"]: r for r in d.health()}
+    assert rows["device"]["ok"] is False
+    assert rows["device"]["state"] == "bad"
+
+
+def test_autostart_off_reports_off_not_bad(monkeypatch):
+    d = make_daemon()
+    monkeypatch.setattr(daemon.pathlib.Path, "exists", lambda self: False)
+    rows = {r["id"]: r for r in d.health()}
+    assert rows["autostart"]["ok"] is None
+    assert rows["autostart"]["state"] == "off"
+
+
+def test_autostart_on_reports_ok_state(monkeypatch):
+    d = make_daemon()
+    monkeypatch.setattr(daemon.pathlib.Path, "exists", lambda self: True)
+    rows = {r["id"]: r for r in d.health()}
+    assert rows["autostart"]["state"] == "ok"
+
+
+def test_failing_sensor_reports_bad_state():
+    d = make_daemon()
+    d.state["connected"] = True
+    d.state["sensor"] = "fail"
+    rows = {r["id"]: r for r in d.health()}
+    assert rows["sensor"]["ok"] is False
+    assert rows["sensor"]["state"] == "bad"
+
+
 def test_valid_ev_records_last_match():
     d = make_daemon()
     d.handle_line(VECTORS["ev_line"])

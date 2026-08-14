@@ -259,9 +259,11 @@ function renderFingerRow(s) {
     row.appendChild(tile);
   }
 
+  const noneEnrolled = (s.slots_used || []).length === 0;
   const addTile = document.createElement("button");
   addTile.type = "button";
-  addTile.className = "finger-tile finger-tile--add";
+  addTile.className = "finger-tile finger-tile--add"
+    + (noneEnrolled ? " finger-tile--empty" : "");
   const free = lowestFreeSlot(s);
   addTile.disabled = free === null || pendingSlot !== null || enrolling;
   const plus = document.createElement("span");
@@ -431,6 +433,14 @@ async function removeFinger(slot) {
   }
 }
 
+// -- status marks: checkmark (ok) / empty checkbox (off) / x (bad) / warn --
+const CHECK_ICONS = {
+  ok: '<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8.5L6.2 11.5L13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  off: '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/></svg>',
+  bad: '<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  warn: '<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 2L15 14H1L8 2Z" fill="currentColor"/><rect x="7.25" y="6" width="1.5" height="4" fill="var(--ink)"/><rect x="7.25" y="11" width="1.5" height="1.5" fill="var(--ink)"/></svg>',
+};
+
 // -- checkup: setup health rows from /api/status, each with a "how to fix" --
 // link into the symptom-keyed Help entry below when it's not ok.
 function updateCheckup(s) {
@@ -440,23 +450,24 @@ function updateCheckup(s) {
   let failing = false;
 
   for (const row of rows) {
-    if (row.ok === false) failing = true;
+    // state is the authoritative source; fall back to ok for older shapes.
+    const state = row.state || (row.ok === true ? "ok" : row.ok === false ? "bad" : "off");
+    if (state === "bad") failing = true;
 
     const li = document.createElement("li");
-    li.className = "checkup-row" + (row.ok === false ? " checkup-row--fail" : "");
+    li.className = "checkup-row" + (state === "bad" ? " checkup-row--fail" : "");
 
-    const dot = document.createElement("span");
-    dot.className = "dot " + (row.ok === true ? "dot--green"
-                              : row.ok === false ? "dot--red"
-                              : "dot--muted");
-    li.appendChild(dot);
+    const mark = document.createElement("span");
+    mark.className = `check-mark check-mark--${state}`;
+    mark.innerHTML = CHECK_ICONS[state] || CHECK_ICONS.off;
+    li.appendChild(mark);
 
     const text = document.createElement("span");
     text.className = "checkup-text";
     text.textContent = `${row.label} — ${row.detail}`;
     li.appendChild(text);
 
-    if (row.ok === false) {
+    if (state === "bad" || state === "warn") {
       const fix = document.createElement("a");
       fix.className = "checkup-fix";
       fix.href = `#${row.fix}`;
@@ -497,19 +508,12 @@ async function refresh() {
   }
 
   document.getElementById("conn").textContent = s.connected
-    ? `Connected — firmware ${s.fw}`
+    ? `Connected: v${(s.fw || "").replace(/^dt-/, "")}`
     : "Not connected. Is it plugged in?";
-  document.getElementById("sensorline").textContent =
-    s.sensor === "ok" ? "Sensor: happy"
-                      : s.sensor === "fail" ? "Sensor: not answering — check the wiring"
-                      : "";
-  if (s.cap) {
-    const used = (s.slots_used || []).length;
-    const usedText = used === 0 ? "none used yet" : used === 1 ? "1 used" : `${used} used`;
-    document.getElementById("capline").textContent = `${s.cap} finger slots (${usedText})`;
-  } else {
-    document.getElementById("capline").textContent = "";
-  }
+
+  const cap = s.cap ? Number(s.cap) : 200;
+  const used = (s.slots_used || []).length;
+  document.getElementById("slots-counter").textContent = `${used} of ${cap} slots used`;
 
   // Single call site for computeRingState — it's also where lastSeq
   // advances, so it must run exactly once per poll.

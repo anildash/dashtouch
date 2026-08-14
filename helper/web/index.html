@@ -14,29 +14,26 @@
     <div class="layout">
       <aside class="rail">
         <section class="card" id="device-card">
-          <h2>Your device</h2>
           <div class="ring-wrap">
             <div class="ring ring--dark" id="ring"></div>
             <p class="ring-label" id="ring-label">Not connected</p>
           </div>
           <p class="health-summary" id="health-summary" hidden>
-            <span class="dot dot--red"></span> Something needs attention &mdash; see Checkup
+            <span class="dot dot--red"></span> Something needs attention &mdash; see System Setup
           </p>
           <p id="conn">Checking&hellip;</p>
-          <p id="sensorline"></p>
-          <p id="capline"></p>
           <ul class="legend">
-            <li><span class="dot dot--purple"></span> Purple &mdash; ready</li>
-            <li><span class="dot dot--white"></span> White &mdash; reading</li>
-            <li><span class="dot dot--cyan"></span> Cyan &mdash; lift your finger</li>
-            <li><span class="dot dot--green"></span> Green &mdash; matched</li>
-            <li><span class="dot dot--red"></span> Red &mdash; no match, or trouble</li>
-            <li><span class="dot dot--yellow"></span> Yellow &mdash; can't reach your Mac</li>
+            <li><span class="dot dot--purple"></span> Ready</li>
+            <li><span class="dot dot--white"></span> Reading</li>
+            <li><span class="dot dot--cyan"></span> Lift your finger</li>
+            <li><span class="dot dot--green"></span> Matched</li>
+            <li><span class="dot dot--red"></span> No match / Error</li>
+            <li><span class="dot dot--yellow"></span> Can't reach your Mac</li>
           </ul>
         </section>
 
         <section class="checkup-section" id="checkup-section">
-          <p class="eyebrow">Checkup</p>
+          <p class="eyebrow">System Setup</p>
           <p class="hint">Is the whole chain set up right, end to end? This
           updates itself as you fix things.</p>
           <ul class="checkup" id="checkup"></ul>
@@ -45,23 +42,29 @@
 
       <div class="main-col">
         <section class="card" id="fingers-card">
-          <h2>Your fingers</h2>
-          <p class="hint">Each fingerprint lives on the sensor itself &mdash;
-          your Mac never sees the prints. Add a finger and follow the ring;
-          you'll name it once it's stored.</p>
+          <div class="card-heading-row">
+            <h2>Your fingers</h2>
+            <span class="slots-counter" id="slots-counter"></span>
+          </div>
           <div class="finger-row" id="finger-row"></div>
           <p class="hint finger-limit-hint" id="finger-limit-hint" hidden>There's
           no room for another finger &mdash; remove one first.</p>
           <div class="finger-panel" id="finger-panel" hidden></div>
           <p id="progress"></p>
         </section>
+        <p class="fyi-note">FYI: Your fingerprints are recorded on the
+        sensor itself, and your Mac never sees any fingerprint data.</p>
 
         <div class="tool-strip" id="tool-strip">
           <div class="tab-row" role="tablist" aria-label="Tools">
             <button type="button" class="tab-btn" id="tab-btn-help" role="tab"
-              aria-selected="false" aria-controls="tab-panel-help">Help</button>
+              aria-selected="false" aria-controls="tab-panel-help">Help
+              <span class="tab-caret" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            </button>
             <button type="button" class="tab-btn" id="tab-btn-debug" role="tab"
-              aria-selected="false" aria-controls="tab-panel-debug">Under the hood</button>
+              aria-selected="false" aria-controls="tab-panel-debug">Under the hood
+              <span class="tab-caret" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            </button>
           </div>
 
           <div class="tab-panel" id="tab-panel-help" role="tabpanel"
@@ -151,12 +154,6 @@
               <code>.venv/bin/dashtouch uninstall-agent</code></p>
             </div>
           </div>
-
-          <p class="help-links">
-            <a href="https://github.com/anildash/dashtouch" target="_blank" rel="noopener">Project on GitHub</a>
-            &middot; <a href="https://github.com/anildash/dashtouch/blob/main/docs/troubleshooting.md" target="_blank" rel="noopener">Troubleshooting guide</a>
-            &middot; <a href="https://github.com/anildash/dashtouch/blob/main/docs/security.md" target="_blank" rel="noopener">Is this thing safe?</a>
-          </p>
           </div>
 
           <div class="tab-panel" id="tab-panel-debug" role="tabpanel"
@@ -170,6 +167,28 @@
       </div>
     </div>
   </main>
+
+  <footer class="site-footer">
+    <div class="footer-links">
+      <a href="https://anildash.com" target="_blank" rel="noopener">Anil Dash</a>
+      <a href="https://github.com/anildash/dashtouch" target="_blank" rel="noopener">Project on GitHub</a>
+      <a href="https://github.com/anildash/dashtouch/blob/main/docs/troubleshooting.md" target="_blank" rel="noopener">Troubleshooting</a>
+      <a href="https://github.com/anildash/dashtouch/blob/main/docs/security.md" target="_blank" rel="noopener">Is this safe?</a>
+      <a class="footer-star" href="https://github.com/anildash/dashtouch" target="_blank" rel="noopener">&#9733; Star on GitHub</a>
+    </div>
+    <div class="footer-social">
+      <a href="https://bsky.app/profile/anildash.com" target="_blank" rel="noopener" aria-label="Anil Dash on Bluesky">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><title>Bluesky</title><path d="M12 8.5C10.7-1.5 2-3.5 2 4.5c0 1.2.6 5.4 1 6 1.4 2 5.2 3.4 9 6-3.8-.7-8 .3-9 3-1.2 3.2 2.3 6 5.3 4.3C10 22.4 11 20.5 12 18.5c1 2 2 3.9 3.7 5.3 3 1.7 6.5-1.1 5.3-4.3-1-2.7-5.2-3.7-9-3 3.8-2.6 7.6-4 9-6 .4-.6 1-4.8 1-6 0-8-8.7-6-10 4z" fill="currentColor"/></svg>
+      </a>
+      <a href="https://me.dm/@anildash" target="_blank" rel="noopener" aria-label="Anil Dash on Mastodon">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><title>Mastodon</title><path d="M12 2.5c-2.7 0-5 .5-5 .5C4 3.6 3 5.5 3 8.5v4c0 4.5 3 6.8 6 7.3 1 .1 1.9.2 3 .2 1.8 0 3.2-.5 3.2-.5l-.1-1.8s-1.5.5-3.1.5c-1.6 0-3.4-.1-3.6-2 -.05-.5-.07-1-.07-1 3.5.8 6.6.4 7.4.3 2.3-.3 4.3-1.8 4.6-3.2.4-2 .4-4.9.4-4.9 0-3-1-4.9-3-5.5 0 0-2.3-.5-5-.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" fill="none"/><path d="M8.5 8.5v4M15.5 8.5v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+      </a>
+      <a href="https://www.threads.net/@anildash" target="_blank" rel="noopener" aria-label="Anil Dash on Threads">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><title>Threads</title><path d="M16.5 11.2c-.2-3.7-2.3-6.2-6-6.2-3.4 0-5.9 2.2-5.9 6.5v1c0 4.3 2.5 6.5 5.9 6.5 3 0 5-1.5 5.6-3.9.5-2-.1-3.6-1.8-4.4-.1-1.8-1.2-2.9-3-2.9-1.3 0-2.3.6-2.8 1.6l1.4.8c.3-.5.7-.8 1.4-.8.8 0 1.3.4 1.5 1.2-.5-.1-1.1-.1-1.7 0-2 .3-3.3 1.5-3.1 3.2.1 1.6 1.5 2.6 3.3 2.4 1.5-.1 2.4-1 2.8-2.2.6.5.8 1.2.5 2.1-.5 1.5-1.9 2.3-3.9 2.3-2.4 0-4.1-1.5-4.1-4.7v-1c0-3.2 1.8-4.7 4.1-4.7 2.4 0 3.7 1.4 3.9 3.9l-1.6.3z" fill="currentColor"/></svg>
+      </a>
+    </div>
+  </footer>
+
   <script src="/app.js"></script>
 </body>
 </html>
