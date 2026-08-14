@@ -17,20 +17,23 @@ DEFAULT_SERIAL = "68EE8F6E7390"
 
 
 class Daemon:
+    # How long a cached password/pairing key is trusted before a match
+    # forces a fresh Keychain read. Long enough that a touch doesn't shell
+    # out to `security` on every poll; short enough that `dashtouch
+    # password`/`dashtouch pairing` take effect within one blink of the
+    # helper's ring, no restart required.
+    _CREDENTIAL_TTL = 5.0
+
     def __init__(self, serial_number: str, port: str | None = None):
         self.serial_number = serial_number
         self.port = port
+        self.pairing_key = None
+        self._password = None
+        self._creds_loaded_at = 0.0
         # Tolerant: a fresh checkout (or a setup that never finished) has
         # nothing in the Keychain yet. Run anyway — health() surfaces the
         # gap instead of the process refusing to start.
-        try:
-            self.pairing_key = keychain.get_pairing_key(serial_number)
-        except keychain.KeychainError:
-            self.pairing_key = None
-        try:
-            self._password = keychain.get_password(serial_number)
-        except keychain.KeychainError:
-            self._password = None
+        self._refresh_credentials()
         self._last_counter = 0
         self._ser = None
         self._write_lock = threading.Lock()
@@ -60,6 +63,31 @@ class Daemon:
             if len(self.events) > 400:
                 del self.events[: len(self.events) - 400]
 
+    # -- credentials (rotation-aware) ----------------------------------
+    def _refresh_credentials(self) -> bool:
+        """Re-read the pairing key and password from the Keychain if the
+        cached copies are older than _CREDENTIAL_TTL (or have never been
+        loaded). Called at construction and again at the moment a match
+        needs them, so `dashtouch password`/`dashtouch pairing` take
+        effect without a helper restart.
+
+        On a Keychain read failure, both values are cleared to None —
+        the same "setup incomplete" state a fresh checkout starts in —
+        rather than silently trusting a stale cached secret. Returns
+        True if both values are available after the call.
+        """
+        now = time.time()
+        if self._creds_loaded_at and now - self._creds_loaded_at < self._CREDENTIAL_TTL:
+            return self.pairing_key is not None and self._password is not None
+        try:
+            self.pairing_key = keychain.get_pairing_key(self.serial_number)
+            self._password = keychain.get_password(self.serial_number)
+        except keychain.KeychainError:
+            self.pairing_key = None
+            self._password = None
+        self._creds_loaded_at = now
+        return self.pairing_key is not None and self._password is not None
+
     # -- pure logic (unit-tested) ------------------------------------
     def handle_line(self, line: str) -> None:
         # Event-type lines: update last_line and bump sequence number.
@@ -82,9 +110,10 @@ class Daemon:
         elif line.startswith("EV "):
             # Nonce/counter/hmac aren't secrets without the pairing key.
             self.log_event("device", line)
-            if self.pairing_key is None or self._password is None:
-                # Setup never finished on this Mac. Don't even try to verify —
-                # the device's own yellow-ring timeout is the designed symptom.
+            if not self._refresh_credentials():
+                # Setup never finished on this Mac, or a Keychain read just
+                # failed. Don't even try to verify — the device's own
+                # yellow-ring timeout is the designed symptom.
                 msg = "match arrived, but Mac-side setup is incomplete — run ./setup"
                 print(msg, file=sys.stderr)
                 self.log_event("helper", msg)
@@ -201,7 +230,7 @@ class Daemon:
             "ok": self._password is not None,
             "detail": "In your Keychain" if self._password is not None
                       else "Not set up yet",
-            "fix": "help-password",
+            "fix": "help-rotate",
         })
 
         n = self.state["hmac_failures"]

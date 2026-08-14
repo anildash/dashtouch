@@ -1,6 +1,11 @@
+import hashlib
+import hmac as hmac_mod
 import json
 import pathlib
+import time
 from unittest import mock
+
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from dashtouch_helper import daemon, protocol
 
@@ -8,6 +13,21 @@ VECTORS = json.loads(
     (pathlib.Path(__file__).parents[2] / "docs" / "protocol-vectors.json").read_text()
 )
 KEY = bytes.fromhex(VECTORS["pairing_key"])
+
+
+def make_ev_line(key: bytes, nonce_hex: str, counter: int, slot: int, score: int) -> str:
+    """Build a validly-signed EV line for tests that need a second touch
+    (the fixture vector only covers one counter value)."""
+    canonical = f"EV {nonce_hex} {counter} {slot} {score}".encode()
+    mac = hmac_mod.new(key, canonical, hashlib.sha256).hexdigest()
+    return f"EV {nonce_hex} {counter} {slot} {score} {mac}"
+
+
+def decrypt_pw_line(key: bytes, nonce: bytes, pw_line: str) -> str:
+    _, gcm_hex, ct_hex = pw_line.split(" ")
+    response_key = protocol.derive_response_key(key, nonce)
+    pt = AESGCM(response_key).decrypt(bytes.fromhex(gcm_hex), bytes.fromhex(ct_hex), None)
+    return pt.decode()
 
 
 class FakeSerial:
@@ -269,3 +289,65 @@ def test_index_ok_prunes_orphan_labels(tmp_path, monkeypatch):
     # Should have logged pruning
     helper_events = [e for e in d.events if e["dir"] == "helper"]
     assert any("tidied up" in e["text"] for e in helper_events)
+
+
+# -- Task 7j: rotation-aware credential cache ---------------------------------
+
+def test_daemon_picks_up_rotated_password_after_ttl(monkeypatch):
+    with mock.patch.object(daemon.keychain, "get_pairing_key", return_value=KEY), \
+         mock.patch.object(daemon.keychain, "get_password", return_value="old"):
+        d = daemon.Daemon("SER1")
+    d._ser = FakeSerial()
+
+    # First touch: within the TTL window, gets the "old" password.
+    d.handle_line(VECTORS["ev_line"])
+    assert len(d._ser.written) == 1
+    reply1 = d._ser.written[0].decode()
+    assert decrypt_pw_line(KEY, bytes.fromhex(VECTORS["nonce"]), reply1) == "old"
+
+    # Rotate: Keychain now reports a new password, and the TTL has elapsed.
+    real_time = time.time
+    monkeypatch.setattr(daemon.time, "time", lambda: real_time() + 10)
+    ev2 = make_ev_line(KEY, VECTORS["nonce"], VECTORS["counter"] + 1,
+                       VECTORS["slot"], VECTORS["score"])
+    with mock.patch.object(daemon.keychain, "get_pairing_key", return_value=KEY), \
+         mock.patch.object(daemon.keychain, "get_password", return_value="new"):
+        d.handle_line(ev2)
+
+    assert len(d._ser.written) == 2
+    reply2 = d._ser.written[1].decode()
+    assert decrypt_pw_line(KEY, bytes.fromhex(VECTORS["nonce"]), reply2) == "new"
+
+
+def test_daemon_does_not_reread_keychain_within_ttl(monkeypatch):
+    """A touch within the TTL window must not shell out to `security` again
+    — only the initial construction-time read should happen."""
+    with mock.patch.object(daemon.keychain, "get_pairing_key", return_value=KEY) as gpk, \
+         mock.patch.object(daemon.keychain, "get_password", return_value="old") as gp:
+        d = daemon.Daemon("SER1")
+        d._ser = FakeSerial()
+        d.handle_line(VECTORS["ev_line"])
+        assert gpk.call_count == 1
+        assert gp.call_count == 1
+
+
+def test_keychain_failure_at_match_time_is_graceful(monkeypatch):
+    with mock.patch.object(daemon.keychain, "get_pairing_key", return_value=KEY), \
+         mock.patch.object(daemon.keychain, "get_password", return_value="old"):
+        d = daemon.Daemon("SER1")
+    d._ser = FakeSerial()
+
+    # Advance past the TTL so the next EV forces a fresh Keychain read.
+    real_time = time.time
+    monkeypatch.setattr(daemon.time, "time", lambda: real_time() + 10)
+    ev2 = make_ev_line(KEY, VECTORS["nonce"], VECTORS["counter"] + 1,
+                       VECTORS["slot"], VECTORS["score"])
+    with mock.patch.object(daemon.keychain, "get_password",
+                           side_effect=daemon.keychain.KeychainError("locked")):
+        d.handle_line(ev2)
+
+    assert d._ser.written == []  # no serial write
+    helper_events = [e for e in d.events if e["dir"] == "helper"]
+    assert any("Mac-side setup is incomplete" in e["text"] for e in helper_events)
+    assert d.pairing_key is None
+    assert d._password is None

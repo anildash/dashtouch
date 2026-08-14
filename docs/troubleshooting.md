@@ -42,10 +42,33 @@ The firmware can't talk to the sensor. In order:
   matched you, then couldn't reach the Mac side.
 - Check the log: `cat /tmp/dashtouch-helper.log`
 
-## It types the WRONG password
+## It types the wrong password
 
-The Keychain copy is stale — you probably changed your Mac password.
-Re-run `./setup` (it's safe to re-run; it just re-asks).
+The Keychain copy is stale — you probably changed your Mac password (or
+it ended up somewhere it shouldn't have, and you already changed it).
+Either way: `.venv/bin/dashtouch password`. It prompts you twice,
+hidden, and updates only the Keychain entry — nothing else about your
+setup changes, and the fix takes effect on your very next touch with no
+restart needed. (`./setup` also works, but it's the sledgehammer — it
+regenerates the pairing key too and expects a reflash. Reach for
+`dashtouch password` first.)
+
+If your password ended up typed somewhere it shouldn't — a chat, a
+shared screen, anywhere synced or logged — treat that old password as
+burned. Change it in System Settings, then run the command above right
+away.
+
+## Fingerprints stopped working after setup
+
+This is a pairing mismatch, not a fingerprint problem — your prints are
+still safe on the sensor. It happens when the pairing key changed
+Mac-side (via `.venv/bin/dashtouch pairing`, or a re-run of `./setup`)
+but the firmware never got reflashed with it. The Checkup's Pairing row
+will show red, and every touch's signature gets silently rejected.
+
+Fix: `.venv/bin/dashtouch pairing` walks you through generating a fresh
+key and reflashing in one go — run it again if you skipped the flash
+step the first time, or flash by hand with the commands it prints.
 
 ## Enrolling keeps failing
 

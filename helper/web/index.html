@@ -76,6 +76,7 @@
             running.</li>
             <li><strong>Nothing on this page at all?</strong> The helper serves
             this page &mdash; if it stopped, so did this.</li>
+            <li><strong><a href="#help-rotate">Need to change your password, or the pairing key?</a></strong> Both take one command &mdash; no re-provisioning, no reflashing your fingerprints.</li>
           </ul>
 
           <div class="help-entries">
@@ -108,22 +109,38 @@
               <a href="https://github.com/anildash/dashtouch/blob/main/docs/troubleshooting.md" target="_blank" rel="noopener">Troubleshooting guide</a>
               walks through it wire by wire.</p>
             </div>
-            <div class="help-entry" id="help-password">
-              <h3>Password isn't set up</h3>
-              <p>Run <code>./setup</code> &mdash; it walks you through it.
-              Your Mac password lives only in your Keychain; this page never
-              sees it, and neither does the gadget. Changed your Mac
-              password recently? Re-run <code>./setup</code> to refresh the
-              Keychain copy.</p>
+            <div class="help-entry" id="help-rotate">
+              <h3>Changing your password or your pairing key</h3>
+              <p><strong>To update the password the gadget types:</strong>
+              change it in macOS System Settings first &mdash; this page and
+              the gadget never change your actual Mac password, only what's
+              typed on your behalf. Once that's done, run
+              <code>.venv/bin/dashtouch password</code>. It prompts you
+              twice (hidden, like a login) and only touches the Keychain
+              entry &mdash; your fingerprints and pairing are untouched, and
+              it takes effect on your very next touch.</p>
+              <p><strong>Did your password end up somewhere it
+              shouldn't</strong> &mdash; typed into the wrong window, a chat
+              box, a shared screen? Treat that old password as burned right
+              away. Change it in System Settings, then run
+              <code>.venv/bin/dashtouch password</code>. That's the whole
+              fix &mdash; no re-provisioning, no reflashing.</p>
+              <p><strong>To rotate the pairing key</strong> (the shared
+              secret the gadget and this Mac use to trust each other), run
+              <code>.venv/bin/dashtouch pairing</code>. This one's heavier:
+              it needs a reflash right after, or the gadget and this Mac
+              will disagree and stop working. The command explains that
+              up front and offers to flash for you on the spot.</p>
             </div>
             <div class="help-entry" id="help-pairing">
               <h3>Pairing looks broken</h3>
               <p>The gadget and this Mac are holding different keys, so
               every signature the gadget sends gets rejected. The classic
-              cause: <code>./setup</code> ran again and wrote a fresh key to
-              your Keychain, but the flash step got skipped, so the board is
-              still carrying the old one. Fix: run <code>./setup</code>
-              again with the board plugged in over USB, and let it flash.</p>
+              cause: the pairing key got rotated (<code>.venv/bin/dashtouch
+              pairing</code>, or a re-run of <code>./setup</code>) but the
+              flash step got skipped, so the board is still carrying the
+              old key. See <a href="#help-rotate">changing your password or
+              your pairing key</a> for the rotation &amp; reflash steps.</p>
             </div>
             <div class="help-entry" id="help-autostart">
               <h3>About autostart</h3>

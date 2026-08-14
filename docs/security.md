@@ -16,6 +16,16 @@ answers when your Mac asks, but "which window gets the keystrokes" is
 decided by macOS focus, not by us. Habit to build: touch the ring when
 you see a password prompt, not before.
 
+**If it happens anyway, here's the recovery, and it's fast.** Change
+your password in System Settings first, then run
+`.venv/bin/dashtouch password` — it prompts you twice, hidden, and
+updates only the Keychain copy the gadget draws from. That's the whole
+fix; no re-provisioning, no reflashing, and the gadget picks up the
+change on its very next touch without a restart. Treat any password
+that landed on a synced or logged surface — a chat you're signed into
+on other devices, a screen recording, a support ticket — as compromised
+the moment you notice, not after you've decided how it happened.
+
 **Your password lives in your Mac's Keychain — never on the gadget.**
 The device stores a *pairing key* (a shared secret), and each match earns
 it a one-time, encrypted copy of your password that it types and

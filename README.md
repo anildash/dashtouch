@@ -72,8 +72,10 @@ your password into the Mac's Keychain (never anywhere else), and flashes
 the firmware onto the board. Then:
 
 ```sh
-.venv/bin/dashtouch run      # start the helper
-.venv/bin/dashtouch enroll   # opens your browser — add a finger
+.venv/bin/dashtouch run       # start the helper
+.venv/bin/dashtouch enroll    # opens your browser — add a finger
+.venv/bin/dashtouch password  # change the password it types (no reflash)
+.venv/bin/dashtouch pairing   # rotate the pairing key (needs a reflash)
 ```
 
 The helper's page lives at port 3274 — DASH on a phone keypad, because of course it is.
