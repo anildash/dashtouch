@@ -340,3 +340,27 @@ def test_daemon_base_url_missing_file(tmp_path, monkeypatch):
     from dashtouch_helper import webui
     monkeypatch.setattr(webui, "URL_PATH", tmp_path / "missing")
     assert cli._daemon_base_url() is None
+
+
+def test_bare_dashtouch_prints_the_url(tmp_path, monkeypatch, capsys):
+    from dashtouch_helper import webui
+    monkeypatch.setattr(webui, "URL_PATH", tmp_path / "webui-url")
+    webui.URL_PATH.write_text("http://127.0.0.1:3274/?token=abc123\n")
+    assert cli.cmd_where(None) == 0
+    assert capsys.readouterr().out.strip() == "http://127.0.0.1:3274/?token=abc123"
+
+
+def test_bare_dashtouch_without_helper_explains(tmp_path, monkeypatch, capsys):
+    from dashtouch_helper import webui
+    monkeypatch.setattr(webui, "URL_PATH", tmp_path / "missing")
+    assert cli.cmd_where(None) == 1
+    out = capsys.readouterr().out
+    assert "isn't running" in out and "dashtouch run" in out
+
+
+def test_bare_dashtouch_survives_a_corrupt_url_file(tmp_path, monkeypatch, capsys):
+    from dashtouch_helper import webui
+    monkeypatch.setattr(webui, "URL_PATH", tmp_path / "webui-url")
+    webui.URL_PATH.write_bytes(b"\xff\xfe")
+    assert cli.cmd_where(None) == 1
+    assert "isn't running" in capsys.readouterr().out

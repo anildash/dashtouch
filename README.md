@@ -85,6 +85,8 @@ the firmware onto the board. Then:
 ```sh
 .venv/bin/dashtouch run       # start the helper
 .venv/bin/dashtouch enroll    # opens your browser — add a finger
+.venv/bin/dashtouch           # prints the link to that page, if you'd
+                              # rather open it yourself
 .venv/bin/dashtouch password  # change the password it types (no reflash)
 .venv/bin/dashtouch pairing   # rotate the pairing key (needs a reflash)
 ```

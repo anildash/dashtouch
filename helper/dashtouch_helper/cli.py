@@ -193,18 +193,49 @@ def cmd_run(args) -> int:
     return 0
 
 
-def cmd_enroll(args) -> int:
+def _webui_url() -> str | None:
+    """The full tokened link to the helper's page, or None if the helper
+    has never run (that file is written on startup)."""
     try:
         url = webui.URL_PATH.read_text().strip()
-    except FileNotFoundError:
-        url = None
+    except (OSError, UnicodeDecodeError):
+        return None
+    return url or None
 
+
+def _no_helper_note() -> None:
+    print("The helper isn't running yet. Start it with:")
+    print("  .venv/bin/dashtouch run")
+    print("or have it start on its own at login:")
+    print("  .venv/bin/dashtouch install-agent")
+
+
+def cmd_where(args) -> int:
+    """Bare `dashtouch` — hand back the address of the helper's page.
+
+    Printed on its own line so it can be piped, e.g. `open $(dashtouch)`.
+    The link carries the session key, so it's as sensitive as a password —
+    the note goes to stderr to keep stdout clean for that pipe.
+    """
+    url = _webui_url()
     if not url:
-        print("The helper isn't running yet — start it with `.venv/bin/dashtouch run`, then")
-        print("try again (or just open the link it prints).")
+        _no_helper_note()
+        return 1
+    print(url)
+    if sys.stderr.isatty():
+        print("\nThat link includes your session key — treat it like a password.\n"
+              "`dashtouch enroll` opens it for you.", file=sys.stderr)
+    return 0
+
+
+def cmd_enroll(args) -> int:
+    url = _webui_url()
+    if not url:
+        _no_helper_note()
         return 1
 
     webbrowser.open(url)
+    print("Opening the helper's page in your browser.")
     return 0
 
 
@@ -398,10 +429,13 @@ def cmd_uninstall_agent(args) -> int:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(prog="dashtouch",
-                                description="Your fingerprint, your Mac.")
+    p = argparse.ArgumentParser(
+        prog="dashtouch",
+        description="Your fingerprint, your Mac. "
+                    "Run with no command to print the link to the helper's page.")
     p.add_argument("--serial", help="board serial (default: this build's)")
-    sub = p.add_subparsers(dest="cmd", required=True)
+    # Not required: bare `dashtouch` prints the web UI address.
+    sub = p.add_subparsers(dest="cmd")
     sub.add_parser("setup", help="first-time setup, start to finish")
     sub.add_parser("run", help="run the helper (launchd uses this)")
     sub.add_parser("enroll", help="open the enrollment page")
@@ -417,6 +451,8 @@ def main() -> None:
     p_pins.add_argument("--normal", action="store_true",
                         help="use the default (silkscreen) pin orientation")
     args = p.parse_args()
+    if args.cmd is None:
+        sys.exit(cmd_where(args))
     rc = {"setup": cmd_setup, "run": cmd_run, "enroll": cmd_enroll,
           "doctor": cmd_doctor, "install-agent": cmd_install_agent,
           "uninstall-agent": cmd_uninstall_agent,
