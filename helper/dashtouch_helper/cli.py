@@ -95,7 +95,7 @@ def cmd_enroll(args) -> int:
         url = None
 
     if not url:
-        print("The helper isn't running yet — start it with `dashtouch run`, then")
+        print("The helper isn't running yet — start it with `.venv/bin/dashtouch run`, then")
         print("try again (or just open the link it prints).")
         return 1
 

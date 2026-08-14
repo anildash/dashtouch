@@ -17,24 +17,27 @@ The firmware can't talk to the sensor. In order:
    each one. A clip that looks attached but isn't cost this project a
    full evening.
 4. **Rare, but real: the board itself.** One known QT Py unit cannot
-   transmit on its `TX` pad at all. `firmware/diagnostics/fp_loopback`
-   settles it in two minutes with a single jumper wire — if it shows
-   zeros flooding in one direction, open `firmware/dashtouch/config.h`
-   and swap the two pin numbers (the comment shows you exactly where).
+   transmit on its `TX` pad at all. [firmware/diagnostics/](../firmware/diagnostics/README.md)
+   has `fp_loopback`, which settles it in two minutes with a single jumper
+   wire — if it shows zeros flooding in one direction, open
+   `firmware/dashtouch/config.h` and swap the two pin numbers (the comment
+   shows you exactly where).
 
 ## The board seems completely dead
 
 - **Is your cable a charging cable?** Plenty of USB-C cables carry no
-  data. Try the cable you use for a hard drive or a camera.
+  data. Try the cable you use for a hard drive or a camera — or grab
+  [a data-capable one](https://amzn.to/4zjg9p9) if you're not sure yours
+  qualifies.
 - **Serial silence isn't death.** The board only speaks when the Mac
   asserts a control signal called DTR. Our tools do this automatically;
-  random serial apps may not. Trust `dashtouch doctor` over a generic
+  random serial apps may not. Trust `.venv/bin/dashtouch doctor` over a generic
   terminal app.
 
 ## It matches (green!) but nothing types
 
-- Is the helper running? `dashtouch run` in a terminal, or
-  `dashtouch install-agent` to make it permanent.
+- Is the helper running? `.venv/bin/dashtouch run` in a terminal, or
+  `.venv/bin/dashtouch install-agent` to make it permanent.
 - A **steady yellow ring** after the green means exactly this: the device
   matched you, then couldn't reach the Mac side.
 - Check the log: `cat /tmp/dashtouch-helper.log`
@@ -53,7 +56,7 @@ Re-run `./setup` (it's safe to re-run; it just re-asks).
 ## "More than one board is plugged in"
 
 Unplug the one that isn't Dashboard Touch, or pass
-`dashtouch --serial <which>` if you actually run two.
+`.venv/bin/dashtouch --serial <which>` if you actually run two.
 
 ## Still stuck?
 

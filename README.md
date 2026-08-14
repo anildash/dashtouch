@@ -24,13 +24,23 @@ desk. (For a lot of home offices, it is.)
 
 | Part | Cost | Where |
 | --- | --- | --- |
-| Adafruit QT Py ESP32-S3 (the tiny computer) | ~$12.50 | [adafruit.com](https://www.adafruit.com/product/5426) |
-| R503 fingerprint sensor (the round thing) | ~$10–20 | Amazon/AliExpress, search "R503 fingerprint" |
-| USB-C cable that carries data | you have one | — |
+| Adafruit QT Py ESP32-S3 (the tiny computer, what Anil used) | ~$12.50 | [adafruit.com](https://www.adafruit.com/product/5426) |
+| R503 fingerprint sensor (the round thing, what Anil used) | ~$10–20 | [Amazon](https://amzn.to/4wnVuO9) |
+| USB-C cable, data-capable (not a charge-only one) | you have one | [Amazon](https://amzn.to/4zjg9p9) |
+
+Presumably a [cheaper board](https://amzn.to/4gjkss2) could work here too —
+untested in this build, so it's a "try it and report back" rather than a
+recommendation. If the Amazon sensor is out of stock, [Adafruit sells the
+same part](https://www.adafruit.com/product/4651) — it's a fine swap, just
+usually pricier and often backordered itself.
+
+Some links on this page are affiliate links — they cost you nothing extra
+and help pay for the next round of parts.
 
 The sensor is a round module about an inch across with a threaded barrel —
 made to poke through a hole in a panel and screw tight. Any panel you
-like. That's the fun part.
+like. That's the fun part. Don't want to build an enclosure? [This one](https://amzn.to/4wwqw6m)
+skips the woodworking.
 
 ## Wire it (six wires, all six matter)
 
@@ -99,6 +109,9 @@ Want it running all the time without a terminal open?
 | Yellow, steady | Matched, but it can't reach your Mac — is the helper running? |
 | Cyan | Lift your finger (enrolling) |
 | Never turns purple | The sensor isn't talking — recheck all six wires |
+
+Ring not matching this table, or stuck on one color? [docs/troubleshooting.md](docs/troubleshooting.md)
+walks through it symptom by symptom.
 
 ## Something not working?
 
