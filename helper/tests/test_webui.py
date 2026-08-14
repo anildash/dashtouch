@@ -86,8 +86,10 @@ def test_enroll_with_token_sends_command_and_saves_label(tmp_path, monkeypatch):
                     {"slot": 2, "label": "right index"}, token)
     assert status == 202
     assert d.sent == ["ENROLL 2"]
-    labels = json.loads((tmp_path / "labels.json").read_text())
-    assert labels["2"] == "right index"
+    # Label is stored in pending_label, not written yet
+    assert d.pending_label == {"slot": 2, "label": "right index"}
+    # Labels file should not exist
+    assert not (tmp_path / "labels.json").exists()
 
 
 def test_delete_with_token(tmp_path, monkeypatch):
@@ -241,3 +243,77 @@ def test_api_status_carries_last_match():
     status, body = req(host, port, "GET", "/api/status")
     assert status == 200
     assert body["last_match"] == {"slot": 5, "score": 150}
+
+
+def test_enroll_stores_pending_label_not_labels_file(tmp_path, monkeypatch):
+    """Enroll request stores pending_label but doesn't write labels.json."""
+    from dashtouch_helper import webui
+    monkeypatch.setattr(webui, "LABELS_PATH", tmp_path / "labels.json")
+    d = FakeDaemon()
+    url = webui.start(d, port=0)
+    host, port = url.split("//")[1].split("/")[0].split(":")
+    token = url.split("token=")[1]
+    port = int(port)
+
+    # Enroll a finger
+    status, body = req(host, port, "POST", "/api/enroll",
+                       {"slot": 5, "label": "right index"}, token=token)
+    assert status == 202
+
+    # Labels file should not exist yet
+    assert not (tmp_path / "labels.json").exists()
+    # Daemon should have pending_label
+    assert d.pending_label == {"slot": 5, "label": "right index"}
+
+
+def test_api_label_requires_token(tmp_path, monkeypatch):
+    """POST /api/label without token returns 403."""
+    from dashtouch_helper import webui
+    monkeypatch.setattr(webui, "LABELS_PATH", tmp_path / "labels.json")
+    d = FakeDaemon()
+    url = webui.start(d, port=0)
+    host, port = url.split("//")[1].split("/")[0].split(":")
+    token = url.split("token=")[1]
+    port = int(port)
+
+    status, body = req(host, port, "POST", "/api/label",
+                       {"slot": 3, "label": "middle"}, token=None)
+    assert status == 403
+
+
+def test_api_label_updates_labels(tmp_path, monkeypatch):
+    """POST /api/label with token updates labels.json."""
+    from dashtouch_helper import webui
+    monkeypatch.setattr(webui, "LABELS_PATH", tmp_path / "labels.json")
+    d = FakeDaemon()
+    url = webui.start(d, port=0)
+    host, port = url.split("//")[1].split("/")[0].split(":")
+    token = url.split("token=")[1]
+    port = int(port)
+
+    status, body = req(host, port, "POST", "/api/label",
+                       {"slot": 3, "label": "middle"}, token=token)
+    assert status == 202
+
+    # Check that label was written
+    labels = json.loads((tmp_path / "labels.json").read_text())
+    assert labels["3"] == "middle"
+
+
+def test_api_label_slot_out_of_range(tmp_path, monkeypatch):
+    """POST /api/label with slot 0 or 201 returns 400."""
+    from dashtouch_helper import webui
+    monkeypatch.setattr(webui, "LABELS_PATH", tmp_path / "labels.json")
+    d = FakeDaemon()
+    url = webui.start(d, port=0)
+    host, port = url.split("//")[1].split("/")[0].split(":")
+    token = url.split("token=")[1]
+    port = int(port)
+
+    status, body = req(host, port, "POST", "/api/label",
+                       {"slot": 0, "label": "invalid"}, token=token)
+    assert status == 400
+
+    status, body = req(host, port, "POST", "/api/label",
+                       {"slot": 201, "label": "invalid"}, token=token)
+    assert status == 400

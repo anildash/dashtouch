@@ -161,7 +161,60 @@ function updateSlotList(s) {
     num.className = "slot-num";
     num.textContent = String(slot);
     li.appendChild(num);
-    li.appendChild(document.createTextNode(` · ${label || "(unnamed)"}`));
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "slot-label";
+    nameSpan.textContent = ` · ${label || "(unnamed)"}`;
+    li.appendChild(nameSpan);
+
+    const ren = document.createElement("button");
+    ren.className = "rename-btn";
+    ren.textContent = "Rename";
+    ren.onclick = async (e) => {
+      e.preventDefault();
+      // Swap label text for input
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "rename-input";
+      input.value = label || "";
+      input.maxLength = 64;
+
+      const save = document.createElement("button");
+      save.className = "save-btn";
+      save.textContent = "Save";
+      const cancel = document.createElement("button");
+      cancel.className = "cancel-btn";
+      cancel.textContent = "Cancel";
+
+      save.onclick = async () => {
+        try {
+          const response = await fetch("/api/label", {method: "POST",
+            headers: {"Content-Type": "application/json", "X-DT-Token": token},
+            body: JSON.stringify({slot, label: input.value})});
+          if (!response.ok) {
+            document.getElementById("progress").textContent = "That didn't go through — this page has probably gone stale. Close this tab and open the fresh link from the helper (or run .venv/bin/dashtouch enroll).";
+          } else {
+            // Re-poll to pick up the change
+            poll();
+          }
+        } catch {
+          document.getElementById("progress").textContent = "Can't reach the helper — is it still running?";
+        }
+      };
+      cancel.onclick = () => {
+        nameSpan.textContent = ` · ${label || "(unnamed)"}`;
+        li.replaceChild(nameSpan, input);
+        li.replaceChild(ren, save);
+        li.removeChild(cancel);
+      };
+
+      li.replaceChild(input, nameSpan);
+      li.replaceChild(save, ren);
+      li.appendChild(cancel);
+      input.focus();
+    };
+    li.appendChild(ren);
+
     const del = document.createElement("button");
     del.className = "remove-btn";
     del.textContent = "Remove";

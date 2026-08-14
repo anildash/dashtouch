@@ -211,3 +211,47 @@ def test_unconfigured_daemon_with_valid_ev_does_not_record_last_match():
     d._ser = FakeSerial()
     d.handle_line(VECTORS["ev_line"])
     assert d.state["last_match"] is None
+
+
+def test_enroll_ok_writes_pending_label(tmp_path, monkeypatch):
+    """ENROLL_OK with pending_label writes the label."""
+    from dashtouch_helper import webui
+    monkeypatch.setattr(webui, "LABELS_PATH", tmp_path / "labels.json")
+    d = make_daemon()
+    d.pending_label = {"slot": 3, "label": "right index"}
+    d.handle_line("ENROLL_OK 3")
+    # After ENROLL_OK, label should be written
+    labels = json.loads((tmp_path / "labels.json").read_text())
+    assert labels.get("3") == "right index"
+    assert d.pending_label is None
+
+
+def test_enroll_fail_clears_pending_label():
+    """ENROLL_FAIL clears pending_label without writing."""
+    d = make_daemon()
+    d.pending_label = {"slot": 3, "label": "right index"}
+    d.handle_line("ENROLL_FAIL slot_3_used")
+    assert d.pending_label is None
+
+
+def test_index_ok_prunes_orphan_labels(tmp_path, monkeypatch):
+    """INDEX_OK prunes labels for slots not in the bitmap."""
+    from dashtouch_helper import webui
+    monkeypatch.setattr(webui, "LABELS_PATH", tmp_path / "labels.json")
+    d = make_daemon()
+    # Pre-populate labels with a non-existent slot
+    labels = {"1": "thumb", "5": "ghost", "3": "index"}
+    (tmp_path / "labels.json").write_text(json.dumps(labels))
+    # INDEX_OK with only slots 1, 3 enrolled
+    # Slot 1: bit 1 in byte 0 (0b00000010 = 0x02)
+    # Slot 3: bit 3 in byte 0 (0b00001000 = 0x08)
+    # Combined: 0x02 | 0x08 = 0x0A
+    d.handle_line("INDEX_OK 0a")
+    # Slot 5 should be pruned
+    updated_labels = json.loads((tmp_path / "labels.json").read_text())
+    assert "1" in updated_labels
+    assert "3" in updated_labels
+    assert "5" not in updated_labels
+    # Should have logged pruning
+    helper_events = [e for e in d.events if e["dir"] == "helper"]
+    assert any("tidied up" in e["text"] for e in helper_events)

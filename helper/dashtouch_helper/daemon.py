@@ -36,6 +36,7 @@ class Daemon:
         self._write_lock = threading.Lock()
         self._events_lock = threading.Lock()
         self.events: list[dict] = []
+        self.pending_label = None
         self.state = {"connected": False, "last_line": "", "sensor": "unknown",
                       "fw": "unknown", "enroll_stage": "", "cap": "",
                       "slots_used": [], "event_seq": 0, "hmac_failures": 0,
@@ -111,7 +112,25 @@ class Daemon:
             self.state["enroll_stage"] = line
             print(f"device: {line}")
             self.log_event("device", line)
-            if line.startswith(("ENROLL_OK", "DELETE_OK")):
+            if line.startswith("ENROLL_OK"):
+                # Save pending label if it matches this slot
+                if self.pending_label:
+                    # Extract slot from line: "ENROLL_OK <slot>"
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        try:
+                            enrolled_slot = int(parts[1])
+                            if self.pending_label["slot"] == enrolled_slot:
+                                webui.save_label(enrolled_slot, self.pending_label["label"])
+                        except (ValueError, IndexError):
+                            pass
+                self.pending_label = None
+                self.send_command("INDEX")
+            elif line.startswith("ENROLL_FAIL"):
+                # Discard pending label on failure
+                self.pending_label = None
+                self.send_command("INDEX")
+            elif line.startswith("DELETE_OK"):
                 self.send_command("INDEX")
         elif line.startswith("STATUS_OK"):
             for tok in line.split():
@@ -132,6 +151,14 @@ class Daemon:
             used = [b * 8 + i for b, byte in enumerate(bitmap) for i in range(8)
                     if byte >> i & 1]
             self.state["slots_used"] = sorted(s for s in used if 1 <= s <= 200)
+
+            # Clean up orphan labels: drop any label for a slot not in slots_used and not pending
+            labels_to_check = set(self.state["slots_used"])
+            if self.pending_label:
+                labels_to_check.add(self.pending_label["slot"])
+            orphan_count = webui.prune_labels(labels_to_check)
+            if orphan_count > 0:
+                self.log_event("helper", f"tidied up {orphan_count} leftover name(s)")
         elif line:
             print(f"device: {line}")
             self.log_event("device", line)

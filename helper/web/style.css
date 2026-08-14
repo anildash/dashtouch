@@ -246,6 +246,39 @@ button:hover { filter: brightness(1.08); }
 }
 .remove-btn:hover { color: var(--text); filter: none; }
 
+.rename-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-weight: 500;
+  padding: .3rem .7rem;
+  font-size: .85rem;
+}
+.rename-btn:hover { color: var(--text); filter: none; }
+
+.rename-input {
+  font: inherit;
+  background: transparent;
+  border: 1px solid var(--aura-purple);
+  color: var(--text);
+  padding: .3rem .6rem;
+  font-size: .95rem;
+  border-radius: 4px;
+  flex: 1;
+  min-width: 150px;
+}
+.rename-input:focus { outline: none; border-color: var(--aura-purple); box-shadow: 0 0 0 2px rgba(160, 107, 255, 0.2); }
+
+.save-btn, .cancel-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-weight: 500;
+  padding: .3rem .7rem;
+  font-size: .85rem;
+}
+.save-btn:hover, .cancel-btn:hover { color: var(--text); filter: none; }
+
 #progress { font-weight: 600; min-height: 1.2em; margin-top: .75rem; }
 
 /* -- enrolled slot list -------------------------------------------------- */
@@ -258,7 +291,9 @@ button:hover { filter: brightness(1.08); }
   border-top: 1px solid var(--line);
 }
 .slot-num { font-family: var(--font-mono); color: var(--text); }
-#slots li .remove-btn { margin-left: auto; }
+.slot-label { flex: 1; }
+#slots li .rename-btn { margin-left: auto; }
+#slots li .remove-btn { margin-left: .5rem; }
 
 /* -- help ------------------------------------------------------------- */
 .help { color: var(--muted); padding-left: 1.1rem; margin: 0; }

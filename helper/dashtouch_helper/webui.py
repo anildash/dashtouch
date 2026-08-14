@@ -29,6 +29,26 @@ def _save_labels(labels: dict) -> None:
     LABELS_PATH.write_text(json.dumps(labels, indent=2) + "\n")
 
 
+def save_label(slot: int, label: str) -> None:
+    """Save a label for a slot (called by daemon on ENROLL_OK, and by /api/label endpoint)."""
+    with _labels_lock:
+        labels = _load_labels()
+        labels[str(slot)] = label
+        _save_labels(labels)
+
+
+def prune_labels(allowed_slots: set) -> int:
+    """Remove labels for slots not in allowed_slots. Returns count of pruned labels."""
+    with _labels_lock:
+        labels = _load_labels()
+        before_count = len(labels)
+        # Keep only labels whose slot (as int) is in allowed_slots
+        labels = {k: v for k, v in labels.items()
+                  if int(k) in allowed_slots}
+        _save_labels(labels)
+        return before_count - len(labels)
+
+
 def _make_handler(daemon, token):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -94,23 +114,32 @@ def _make_handler(daemon, token):
                 daemon.log_event("web", "rejected: bad request")
                 self._json(400, {"error": "slot out of range"})
                 return
-            with _labels_lock:
-                labels = _load_labels()
-                if self.path == "/api/enroll":
-                    labels[str(slot)] = str(body.get("label", ""))[:64]
-                    _save_labels(labels)
-                    daemon.state["enroll_stage"] = ""
-                    daemon.send_command(f"ENROLL {slot}")
-                    daemon.log_event("web", f"enroll slot {slot} accepted")
-                    self._json(202, {"ok": True})
-                elif self.path == "/api/delete":
-                    labels.pop(str(slot), None)
-                    _save_labels(labels)
-                    daemon.send_command(f"DELETE {slot}")
-                    daemon.log_event("web", f"delete slot {slot} accepted")
-                    self._json(202, {"ok": True})
-                else:
-                    self.send_error(404)
+
+            if self.path == "/api/label":
+                # Rename endpoint: update label immediately (no sensor change)
+                label_text = str(body.get("label", ""))[:64]
+                save_label(slot, label_text)
+                daemon.log_event("web", f"renamed slot {slot} to '{label_text}'")
+                self._json(202, {"ok": True})
+            else:
+                with _labels_lock:
+                    labels = _load_labels()
+                    if self.path == "/api/enroll":
+                        # Store pending_label; commit only on ENROLL_OK
+                        label_text = str(body.get("label", ""))[:64]
+                        daemon.pending_label = {"slot": slot, "label": label_text}
+                        daemon.state["enroll_stage"] = ""
+                        daemon.send_command(f"ENROLL {slot}")
+                        daemon.log_event("web", f"enroll slot {slot} accepted")
+                        self._json(202, {"ok": True})
+                    elif self.path == "/api/delete":
+                        labels.pop(str(slot), None)
+                        _save_labels(labels)
+                        daemon.send_command(f"DELETE {slot}")
+                        daemon.log_event("web", f"delete slot {slot} accepted")
+                        self._json(202, {"ok": True})
+                    else:
+                        self.send_error(404)
 
     return Handler
 
