@@ -190,3 +190,24 @@ def test_tampered_ev_counts_hmac_failure_and_fails_pairing_health():
     assert d.state["hmac_failures"] == 1
     rows = {r["id"]: r for r in d.health()}
     assert rows["pairing"]["ok"] is False
+
+
+def test_valid_ev_records_last_match():
+    d = make_daemon()
+    d.handle_line(VECTORS["ev_line"])
+    assert d.state["last_match"] == {"slot": VECTORS["slot"], "score": VECTORS["score"]}
+
+
+def test_tampered_ev_does_not_record_last_match():
+    d = make_daemon()
+    bad = VECTORS["ev_line"][:-1] + ("0" if VECTORS["ev_line"][-1] != "0" else "1")
+    d.handle_line(bad)
+    assert d.state["last_match"] is None
+
+
+def test_unconfigured_daemon_with_valid_ev_does_not_record_last_match():
+    # No pairing key setup
+    d = daemon.Daemon("SER1")
+    d._ser = FakeSerial()
+    d.handle_line(VECTORS["ev_line"])
+    assert d.state["last_match"] is None

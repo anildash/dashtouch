@@ -19,7 +19,7 @@ class FakeDaemon:
     def __init__(self):
         self.state = {"connected": True, "sensor": "ok", "fw": "dt-0.1.0",
                       "enroll_stage": "", "last_line": "", "cap": "200",
-                      "slots_used": [1, 3]}
+                      "slots_used": [1, 3], "last_match": None}
         self.sent = []
         self.events = []
         self._events_lock = threading.Lock()
@@ -224,3 +224,20 @@ def test_dashtouch_port_env_override_ephemeral():
             os.environ.pop("DASHTOUCH_PORT", None)
         else:
             os.environ["DASHTOUCH_PORT"] = old_val
+
+
+def test_api_status_carries_last_match():
+    """Verify that /api/status includes last_match from daemon state."""
+    d = FakeDaemon()
+    d.state["last_match"] = {"slot": 5, "score": 150}
+    host, port, token = start.__wrapped__(d, None, None) if hasattr(start, '__wrapped__') else (None, None, None)
+    # Need to get host/port from actual start; use simpler approach
+    url = webui.start(d, port=0)
+    host, port = url.split("//")[1].split("/")[0].split(":")
+    host = host.strip()
+    port = int(port)
+    token = url.split("token=")[1]
+
+    status, body = req(host, port, "GET", "/api/status")
+    assert status == 200
+    assert body["last_match"] == {"slot": 5, "score": 150}

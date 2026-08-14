@@ -60,7 +60,18 @@ function computeRingState(s) {
     }
     const now = Date.now();
     if (now - flashStartedAt < FLASH_MS) {
-      return {cls: flashCls, label: "That's a match"};
+      // Determine which finger matched
+      let matchLabel = "That's a match";
+      if (s.last_match) {
+        const slotNum = s.last_match.slot;
+        const slotKey = String(slotNum);
+        if (s.slots && s.slots[slotKey]) {
+          matchLabel = `That's your ${s.slots[slotKey]}`;
+        } else {
+          matchLabel = `That's slot ${slotNum}`;
+        }
+      }
+      return {cls: flashCls, label: matchLabel};
     }
     return {cls: "ring--idle", label: "Ready"};
   }

@@ -38,7 +38,8 @@ class Daemon:
         self.events: list[dict] = []
         self.state = {"connected": False, "last_line": "", "sensor": "unknown",
                       "fw": "unknown", "enroll_stage": "", "cap": "",
-                      "slots_used": [], "event_seq": 0, "hmac_failures": 0}
+                      "slots_used": [], "event_seq": 0, "hmac_failures": 0,
+                      "last_match": None}
 
     # -- connection lifecycle -----------------------------------------------
     def _on_connect(self) -> None:
@@ -105,6 +106,7 @@ class Daemon:
             self.send_command(reply)
             print(f"match slot={ev.slot} score={ev.score} -> sent encrypted password")
             self.log_event("helper", f"match slot={ev.slot} score={ev.score} -> sent encrypted password")
+            self.state["last_match"] = {"slot": ev.slot, "score": ev.score}
         elif line.startswith(("ENROLL_", "DELETE_")):
             self.state["enroll_stage"] = line
             print(f"device: {line}")
