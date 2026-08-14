@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import os
 import pathlib
 import secrets as pysecrets
 import shutil
@@ -221,18 +222,63 @@ def cmd_doctor(args) -> int:
 
 
 def cmd_install_agent(args) -> int:
+    """Install the helper as a launch agent using the modern launchctl API."""
     PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
     PLIST_PATH.write_text(render_plist(sys.executable, str(REPO)))
-    subprocess.run(["launchctl", "unload", str(PLIST_PATH)],
-                   capture_output=True)
+
+    uid = os.getuid()
+    domain = f"gui/{uid}"
+    service_name = "com.dashtouch.helper"
+
+    # 1. Tear down first, tolerating absence
+    subprocess.run(["launchctl", "bootout", f"{domain}/{service_name}"],
+                   capture_output=True, check=False)
+
+    # 2. Load with the modern API
     try:
-        subprocess.run(["launchctl", "load", str(PLIST_PATH)], check=True)
-        print(f"Installed and started. It now runs whenever you're logged in.")
-        print(f"Logs: /tmp/dashtouch-helper.log")
-        return 0
-    except subprocess.CalledProcessError:
-        print("launchctl refused — try `launchctl unload` first, then re-run.")
+        result = subprocess.run(["launchctl", "bootstrap", domain, str(PLIST_PATH)],
+                                capture_output=True, check=True, text=True)
+    except subprocess.CalledProcessError as e:
+        print("launchctl bootstrap failed:")
+        if e.stderr:
+            print(e.stderr.strip())
         return 1
+
+    # 3. Verify it took
+    result = subprocess.run(["launchctl", "print", f"{domain}/{service_name}"],
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        print("launchctl accepted it but the helper isn't registered — something's off")
+        return 1
+
+    print("Installed and started. It now runs whenever you're logged in.")
+    print("Logs: /tmp/dashtouch-helper.log")
+    print()
+    print("To stop it later, run:")
+    print(f"  launchctl bootout gui/$(id -u)/com.dashtouch.helper")
+    print("Or use the `dashtouch uninstall-agent` command.")
+    return 0
+
+
+def cmd_uninstall_agent(args) -> int:
+    """Remove the launch agent."""
+    uid = os.getuid()
+    domain = f"gui/{uid}"
+    service_name = "com.dashtouch.helper"
+
+    # Bootout and confirm it's gone
+    result = subprocess.run(["launchctl", "bootout", f"{domain}/{service_name}"],
+                            capture_output=True, text=True)
+
+    # Verify it's gone
+    verify = subprocess.run(["launchctl", "print", f"{domain}/{service_name}"],
+                            capture_output=True, text=True)
+    if verify.returncode == 0:
+        print("Couldn't unload the helper — something's off")
+        return 1
+
+    print("Uninstalled. The helper won't start on your next login.")
+    return 0
 
 
 def main() -> None:
@@ -245,11 +291,13 @@ def main() -> None:
     sub.add_parser("enroll", help="open the enrollment page")
     sub.add_parser("doctor", help="quick health check")
     sub.add_parser("install-agent", help="run the helper automatically at login")
+    sub.add_parser("uninstall-agent", help="stop running the helper at login")
     p_password = sub.add_parser("password", help="change the password Dashboard Touch types")
     p_password.add_argument("--password", help=argparse.SUPPRESS)
     sub.add_parser("pairing", help="rotate the pairing key (needs a reflash)")
     args = p.parse_args()
     rc = {"setup": cmd_setup, "run": cmd_run, "enroll": cmd_enroll,
           "doctor": cmd_doctor, "install-agent": cmd_install_agent,
+          "uninstall-agent": cmd_uninstall_agent,
           "password": cmd_password, "pairing": cmd_pairing}[args.cmd](args)
     sys.exit(rc)

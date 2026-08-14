@@ -128,3 +128,100 @@ def test_pairing_does_not_flash_when_declined(tmp_path, monkeypatch):
     args = argparse.Namespace(serial=None)
     assert cli.cmd_pairing(args) == 0
     run.assert_not_called()
+
+
+# -- Task 8: modern launchctl API -------------------------------------------
+
+def test_install_agent_uses_modern_launchctl_api(tmp_path, monkeypatch):
+    """install-agent uses bootstrap/bootout with verification."""
+    plist_path = tmp_path / "LaunchAgents" / "com.dashtouch.helper.plist"
+    monkeypatch.setattr(cli, "PLIST_PATH", plist_path)
+    monkeypatch.setattr(cli, "REPO", tmp_path / "repo")
+
+    run_calls = []
+    def mock_run(cmd, **kwargs):
+        run_calls.append((cmd, kwargs))
+        # bootout (first call, when not loaded): exit 1
+        if cmd[0:3] == ["launchctl", "bootout", "gui/501/com.dashtouch.helper"]:
+            if len(run_calls) == 1:
+                return mock.Mock(returncode=1)
+        # bootstrap (second call): exit 0
+        if cmd[0:2] == ["launchctl", "bootstrap", "gui/501"]:
+            return mock.Mock(returncode=0)
+        # print (third call): exit 0, verify it's there
+        if cmd[0:2] == ["launchctl", "print", "gui/501/com.dashtouch.helper"]:
+            return mock.Mock(returncode=0)
+        return mock.Mock(returncode=0)
+
+    monkeypatch.setattr(cli.subprocess, "run", mock_run)
+    monkeypatch.setattr(cli.os, "getuid", lambda: 501)
+
+    args = argparse.Namespace(serial=None)
+    assert cli.cmd_install_agent(args) == 0
+
+    # Verify the sequence: bootout, bootstrap, print
+    assert len(run_calls) >= 3
+    assert run_calls[0][0][1] == "bootout"  # First call is bootout
+    assert run_calls[1][0][1] == "bootstrap"  # Second call is bootstrap
+    assert run_calls[2][0][1] == "print"  # Third call is print (verify)
+
+
+def test_install_agent_fails_if_bootstrap_fails(tmp_path, monkeypatch):
+    """install-agent returns 1 if bootstrap fails."""
+    plist_path = tmp_path / "LaunchAgents" / "com.dashtouch.helper.plist"
+    monkeypatch.setattr(cli, "PLIST_PATH", plist_path)
+    monkeypatch.setattr(cli, "REPO", tmp_path / "repo")
+
+    def mock_run(cmd, **kwargs):
+        if cmd[0:2] == ["launchctl", "bootstrap"]:
+            raise cli.subprocess.CalledProcessError(1, cmd, stderr="Permission denied")
+        return mock.Mock(returncode=0)
+
+    monkeypatch.setattr(cli.subprocess, "run", mock_run)
+    monkeypatch.setattr(cli.os, "getuid", lambda: 501)
+
+    args = argparse.Namespace(serial=None)
+    assert cli.cmd_install_agent(args) == 1
+
+
+def test_install_agent_fails_if_verification_fails(tmp_path, monkeypatch):
+    """install-agent returns 1 if launchctl print fails (not registered)."""
+    plist_path = tmp_path / "LaunchAgents" / "com.dashtouch.helper.plist"
+    monkeypatch.setattr(cli, "PLIST_PATH", plist_path)
+    monkeypatch.setattr(cli, "REPO", tmp_path / "repo")
+
+    def mock_run(cmd, **kwargs):
+        if cmd[0:2] == ["launchctl", "print"]:
+            # Verification fails: agent not registered
+            return mock.Mock(returncode=1)
+        return mock.Mock(returncode=0)
+
+    monkeypatch.setattr(cli.subprocess, "run", mock_run)
+    monkeypatch.setattr(cli.os, "getuid", lambda: 501)
+
+    args = argparse.Namespace(serial=None)
+    assert cli.cmd_install_agent(args) == 1
+
+
+def test_uninstall_agent_boots_out_and_verifies(monkeypatch):
+    """uninstall-agent uses bootout and confirms removal."""
+    calls = []
+    def mock_run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd[0:2] == ["launchctl", "bootout"]:
+            return mock.Mock(returncode=0)
+        if cmd[0:2] == ["launchctl", "print"]:
+            # After bootout, print should fail (agent is gone)
+            return mock.Mock(returncode=1)
+        return mock.Mock(returncode=0)
+
+    monkeypatch.setattr(cli.subprocess, "run", mock_run)
+    monkeypatch.setattr(cli.os, "getuid", lambda: 501)
+
+    args = argparse.Namespace(serial=None)
+    assert cli.cmd_uninstall_agent(args) == 0
+
+    # Should have called bootout and print
+    assert len(calls) >= 2
+    assert calls[0][1] == "bootout"
+    assert calls[1][1] == "print"
