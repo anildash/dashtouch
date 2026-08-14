@@ -58,6 +58,15 @@ function toggleTab(name) {
 document.getElementById("tab-btn-help").onclick = () => toggleTab("help");
 document.getElementById("tab-btn-debug").onclick = () => toggleTab("debug");
 
+// -- settings card: collapsed by default, no persisted state ------------
+document.getElementById("settings-toggle").onclick = () => {
+  const btn = document.getElementById("settings-toggle");
+  const panel = document.getElementById("settings-panel");
+  const open = btn.getAttribute("aria-expanded") === "true";
+  btn.setAttribute("aria-expanded", String(!open));
+  panel.hidden = open;
+};
+
 // Delegated (rather than bound once at load) so the Update available tab,
 // added dynamically once a check finds something, gets arrow-key nav too.
 document.querySelector(".tab-row").addEventListener("keydown", (e) => {
@@ -209,6 +218,10 @@ document.getElementById("update-check-btn").onclick = checkForUpdates;
 // -- the twin ring: on-screen mirror of the physical aura ------------------
 const RING_CLASSES = ["ring--idle", "ring--reading", "ring--lift", "ring--match",
   "ring--nomatch", "ring--fail", "ring--helper", "ring--dark", "ring--boot-fail"];
+// Idle-only modifiers layered on top of "ring--idle" — they carry the
+// user's configured resting color/style, so they're tracked separately
+// from RING_CLASSES (which are the mutually-exclusive status states).
+const IDLE_MODIFIER_CLASSES = ["ring--idle-off", "ring--idle-breathing"];
 const FLASH_MS = 1000; // 0.25s steps x 4 iterations
 
 // Tracks the most recent event sequence number; when event_seq advances,
@@ -291,16 +304,59 @@ function computeRingState(s) {
   return {cls: "ring--idle", label: "Ready"};
 }
 
+// The ring's idle appearance mirrors the device's configured resting
+// color/style (settings.idle_color / settings.idle_style). Falls back to
+// the historical purple/steady default while settings are still unknown —
+// momentary, so no error copy.
+function idleAppearance() {
+  const settings = currentSettingsBase();
+  const colorDef = IDLE_COLORS.find((c) => c.n === settings.idle_color) || IDLE_COLORS[3];
+  const breathing = settings.idle_style === 2;
+  return {colorDef, breathing};
+}
+
 function updateRing(state) {
   const {cls, label} = state;
   const ring = document.getElementById("ring");
-  ring.classList.remove(...RING_CLASSES);
+  ring.classList.remove(...RING_CLASSES, ...IDLE_MODIFIER_CLASSES);
   ring.classList.add(cls);
+
+  const {colorDef, breathing} = idleAppearance();
+  if (cls === "ring--idle") {
+    if (colorDef.n === 0) {
+      // Off: no fill, no glow — just the faint --line outline handled in CSS.
+      ring.style.removeProperty("--ring-idle-color");
+      ring.style.removeProperty("--ring-idle-color-rgb");
+      ring.classList.add("ring--idle-off");
+    } else {
+      ring.style.setProperty("--ring-idle-color", `var(${colorDef.cssVar})`);
+      ring.style.setProperty("--ring-idle-color-rgb", `var(${colorDef.cssVar}-rgb)`);
+      if (breathing) ring.classList.add("ring--idle-breathing");
+    }
+  }
+
   const ringLabel = document.getElementById("ring-label");
   if (cls === "ring--helper") {
     ringLabel.innerHTML = '<a href="#help-yellow">Can\'t reach your Mac — why?</a>';
   } else {
     ringLabel.textContent = label;
+  }
+
+  updateReadyLegendDot(colorDef);
+}
+
+// The rail legend's "Ready" swatch is the only legend entry that isn't a
+// fixed status color — it always mirrors the configured idle color, even
+// when the ring itself is currently showing some other state.
+function updateReadyLegendDot(colorDef) {
+  const dot = document.querySelector(".legend li:first-child .dot");
+  if (!dot) return;
+  if (colorDef.n === 0) {
+    dot.style.background = "transparent";
+    dot.style.boxShadow = "inset 0 0 0 1px var(--line)";
+  } else {
+    dot.style.background = `var(${colorDef.cssVar})`;
+    dot.style.boxShadow = "";
   }
 }
 

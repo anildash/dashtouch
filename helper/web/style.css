@@ -107,6 +107,34 @@ a:hover { opacity: .85; }
 .card-heading-row h2 { margin: 0; }
 .slots-counter { color: var(--muted); font-size: 12px; white-space: nowrap; }
 
+/* -- settings card: collapsible, closed by default ---------------------- */
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+}
+.settings-toggle:hover { opacity: .85; }
+.settings-toggle h2 { margin: 0; }
+.settings-gear {
+  display: inline-flex;
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: none;
+  color: var(--muted);
+}
+.settings-gear svg { width: 100%; height: 100%; display: block; }
+.settings-caret { margin-left: auto; }
+.settings-toggle[aria-expanded="true"] .settings-caret { transform: rotate(180deg); }
+#settings-panel { margin-top: .75rem; }
+
 .fyi-note {
   color: var(--muted);
   font-size: .85rem;
@@ -130,9 +158,19 @@ a:hover { opacity: .85; }
 .ring-label { color: var(--muted); font-size: .9rem; margin: 0; }
 
 .ring--idle {
-  border-color: var(--aura-purple);
-  box-shadow: 0 0 12px rgba(var(--aura-purple-rgb), .9),
-              0 0 42px rgba(var(--aura-purple-rgb), .65);
+  border-color: var(--ring-idle-color, var(--aura-purple));
+  box-shadow: 0 0 12px rgba(var(--ring-idle-color-rgb, var(--aura-purple-rgb)), .9),
+              0 0 42px rgba(var(--ring-idle-color-rgb, var(--aura-purple-rgb)), .65);
+}
+.ring--idle-breathing {
+  animation: breathe 2.4s ease-in-out infinite;
+}
+/* Idle color 0 (off): the physical ring is dark, so mirror that — no
+   fill, no glow — but keep a faint outline so the circle still reads as
+   a shape on the page. Declared after .ring--idle so it wins the tie. */
+.ring--idle-off {
+  border-color: var(--line);
+  box-shadow: none;
 }
 .ring--reading {
   border-color: var(--aura-white);
