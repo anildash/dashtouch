@@ -23,7 +23,9 @@
           </p>
           <p id="conn"><span id="conn-text">Checking&hellip;</span><button
             type="button" id="update-check-btn" class="update-check-btn"
-            aria-label="Check for updates" title="Check for updates" hidden><svg
+            aria-label="Check for updates — the one place Dashboard Touch talks to the internet, and only when you press it"
+            title="Check for updates — the one place Dashboard Touch talks to the internet, and only when you press it"
+            hidden><svg
             viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"
             aria-hidden="true"><path d="M13.5 8A5.5 5.5 0 1 1 12 4.3"
             stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path
@@ -204,6 +206,23 @@
               log in, so you don't have to remember to run it by hand. To
               undo it:
               <code>.venv/bin/dashtouch uninstall-agent</code></p>
+            </div>
+            <div class="help-entry" id="help-updates">
+              <h3>Checking for updates</h3>
+              <p>The little refresh button next to the version number is
+              <strong>the one place Dashboard Touch talks to the internet,
+              and it only does it when you press it.</strong> Nothing else
+              here phones home: your fingerprints stay on the sensor, your
+              password stays in your Mac's Keychain, and neither has
+              anywhere else to go.</p>
+              <p>When you press it, your Mac fetches one small file from
+              GitHub listing the current version, and compares it to yours.
+              Nothing about you goes with the request &mdash; no account, no
+              identifier, no note of what you have installed.</p>
+              <p>It's worth pressing now and then. This gadget types your
+              real password, so if a security problem ever turns up, this is
+              how you'd find out a fix exists &mdash; and those updates are
+              flagged in red so they don't get lost among cosmetic ones.</p>
             </div>
           </div>
           </div>

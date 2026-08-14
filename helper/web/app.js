@@ -112,15 +112,26 @@ const REDUCED_MOTION = window.matchMedia
 let updateChecking = false;
 let updateTabShown = false;
 
-function setUpdateLine(text) {
+// `withNote` appends the one-line reminder that this button is the only
+// thing here that reaches the internet, linking to the fuller Help entry.
+// Skipped while a check is in flight — the transient "Checking…" state
+// shouldn't carry a paragraph with it.
+function setUpdateLine(text, withNote = false) {
   const line = document.getElementById("update-line");
   if (!text) {
     line.hidden = true;
     line.textContent = "";
-  } else {
-    line.textContent = text;
-    line.hidden = false;
+    return;
   }
+  line.textContent = text;
+  if (withNote) {
+    line.append(" ");
+    const a = document.createElement("a");
+    a.href = "#help-updates";
+    a.textContent = "This is the one place we send data.";
+    line.append(a);
+  }
+  line.hidden = false;
 }
 
 // Adds the "Update available" tab beside Help / Under the hood, once per
@@ -214,10 +225,10 @@ async function checkForUpdates() {
         setUpdateLine(null);
         showUpdateTab(data);
       } else {
-        setUpdateLine("You're up to date.");
+        setUpdateLine("You're up to date.", true);
       }
     } else {
-      setUpdateLine(data.error || "Couldn't check for updates just now.");
+      setUpdateLine(data.error || "Couldn't check for updates just now.", true);
     }
   } catch {
     setUpdateLine("Can't reach the helper — is it still running?");
