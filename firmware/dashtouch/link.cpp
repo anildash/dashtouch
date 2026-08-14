@@ -21,6 +21,16 @@ static uint32_t s_counter = 0;
 static uint8_t s_lastNonce[16];
 static bool s_evPending = false;
 
+// Transient session state only — deliberately not persisted to NVS. A
+// device stuck paused across a reboot would be a bad failure, and the
+// helper re-sends PAUSE 0 on every connect anyway.
+static bool s_paused = false;
+static uint32_t s_pauseDeadline = 0;
+// If no PAUSE 1 refresh arrives within this window, auto-resume. A closed
+// browser tab or crashed helper must never leave the sensor permanently
+// deaf. See docs/protocol.md.
+static const uint32_t kPauseTimeoutMs = 90000;
+
 static void hmac256(const uint8_t* key, size_t klen,
                     const uint8_t* msg, size_t mlen, uint8_t out[32]) {
   const mbedtls_md_info_t* info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
@@ -115,8 +125,19 @@ void linkHandleCommand(const String& line) {
   if (line == "PING") {
     Serial.println("PONG");
   } else if (line == "STATUS") {
-    Serial.printf("STATUS_OK proto=1 fw=%s sensor=%s cap=%u\n",
-                  DT_FW_VERSION, g_sensorOk ? "ok" : "fail", g_capacity);
+    Serial.printf("STATUS_OK proto=1 fw=%s sensor=%s cap=%u paused=%u\n",
+                  DT_FW_VERSION, g_sensorOk ? "ok" : "fail", g_capacity,
+                  linkIsPaused() ? 1 : 0);
+  } else if (line.startsWith("PAUSE ")) {
+    String valStr = line.substring(6);
+    valStr.trim();
+    if (valStr == "0" || valStr == "1") {
+      s_paused = (valStr == "1");
+      s_pauseDeadline = millis() + kPauseTimeoutMs;  // harmless when resuming
+      Serial.printf("PAUSE_OK %u\n", s_paused ? 1 : 0);
+    } else {
+      Serial.println("PAUSE_FAIL");
+    }
   } else if (line == "SELFTEST") {
     Serial.println(linkSelfTest() ? "SELFTEST_OK" : "SELFTEST_FAIL");
   } else if (line == "INDEX") {
@@ -187,6 +208,13 @@ void linkHandleCommand(const String& line) {
     Serial.printf("UNKNOWN_CMD %s\n", line.c_str());
   }
   Serial.flush();
+}
+
+bool linkIsPaused() {
+  if (s_paused && millis() >= s_pauseDeadline) {
+    s_paused = false;  // auto-resume: no refresh arrived in time
+  }
+  return s_paused;
 }
 
 bool linkSelfTest() {

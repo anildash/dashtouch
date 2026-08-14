@@ -789,3 +789,53 @@ def test_second_instance_does_not_overwrite_live_helpers_token(tmp_path, monkeyp
     # TOKEN_PATH (the second instance's) was never written, since it
     # deferred to the live first helper rather than claim the shared state.
     assert not corrupt_token_path.exists() or corrupt_token_path.read_bytes() == b"\xff\xfe"
+
+
+# -- /api/pause ---------------------------------------------------------------
+# Guards the "Name this finger" bug: the device must actually stop matching
+# while a naming/renaming field is focused, not just have the helper
+# silently withhold the password (that would show the yellow "can't reach
+# your Mac" ring, which is a lie). See docs/protocol.md's PAUSE command.
+
+def test_pause_requires_token():
+    d, host, port, token = start()
+    status, _ = req(host, port, "POST", "/api/pause", {"paused": True})
+    assert status == 403
+    assert d.sent == []
+
+
+def test_pause_true_sends_pause_1():
+    d, host, port, token = start()
+    status, body = req(host, port, "POST", "/api/pause", {"paused": True}, token)
+    assert status == 202
+    assert body == {"ok": True}
+    assert d.sent == ["PAUSE 1"]
+
+
+def test_pause_false_sends_pause_0():
+    d, host, port, token = start()
+    status, _ = req(host, port, "POST", "/api/pause", {"paused": False}, token)
+    assert status == 202
+    assert d.sent == ["PAUSE 0"]
+
+
+def test_pause_missing_field_rejected():
+    d, host, port, token = start()
+    status, _ = req(host, port, "POST", "/api/pause", {}, token)
+    assert status == 400
+    assert d.sent == []
+
+
+def test_pause_non_boolean_value_rejected():
+    for junk in (1, "true", None, "yes", 0):
+        d, host, port, token = start()
+        status, _ = req(host, port, "POST", "/api/pause", {"paused": junk}, token)
+        assert status == 400
+        assert d.sent == []
+
+
+def test_pause_malformed_body_rejected():
+    d, host, port, token = start()
+    status, _ = req(host, port, "POST", "/api/pause", None, token)
+    assert status == 400
+    assert d.sent == []

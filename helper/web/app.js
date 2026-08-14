@@ -527,6 +527,7 @@ function renderFingerPanel(s) {
     };
     panel.appendChild(label);
     panel.appendChild(save);
+    appendPauseNote(panel);
     requestAnimationFrame(() => input.focus());
   } else if (selectedSlot !== null) {
     editingSlot = selectedSlot;  // Mark that we're editing
@@ -567,11 +568,74 @@ function renderFingerPanel(s) {
     panel.appendChild(label);
     panel.appendChild(save);
     panel.appendChild(remove);
+    appendPauseNote(panel);
     requestAnimationFrame(() => input.focus());
   } else {
     panel.hidden = true;
     editingSlot = null;
   }
+
+  syncPauseState();
+}
+
+// -- pause the sensor while a naming/renaming field is open ---------------
+// The bug this guards: the "Name this finger" field is shown right after
+// the person just had their finger on the sensor, so a stray touch while
+// it's focused would match and type their real password into the name
+// field — which then gets saved to disk. The firmware actually stops
+// matching for as long as this page says so (see docs/protocol.md's
+// PAUSE); it also auto-resumes on its own after 90s so a crashed helper or
+// a closed tab can never leave the sensor permanently deaf — this page's
+// 30s refresh is just keeping that window topped up, not the mechanism
+// itself. No new ring color: this is a brief, on-screen-driven state, and
+// the LED language is settled (see led.h) — the page carries the feedback.
+let pauseActive = false;
+let pauseRefreshTimer = null;
+
+async function sendPause(paused) {
+  if (!token) return;
+  try {
+    await fetch("/api/pause", {method: "POST",
+      headers: {"Content-Type": "application/json", "X-DT-Token": token},
+      body: JSON.stringify({paused}),
+      keepalive: true});
+  } catch {
+    // Best-effort — if this never lands, the firmware's own 90s auto-resume
+    // (or the next successful refresh) is the backstop.
+  }
+}
+
+// Called every time the finger panel re-renders — the single place that
+// knows whether a naming/renaming field is currently open.
+function syncPauseState() {
+  const shouldPause = namingSlot !== null || selectedSlot !== null;
+  if (shouldPause === pauseActive) return;
+  pauseActive = shouldPause;
+  if (shouldPause) {
+    sendPause(true);
+    // Refresh well inside the firmware's 90s auto-resume window so a long
+    // pause (someone thinking about what to name a finger) never lapses.
+    pauseRefreshTimer = setInterval(() => sendPause(true), 30000);
+  } else {
+    if (pauseRefreshTimer) clearInterval(pauseRefreshTimer);
+    pauseRefreshTimer = null;
+    sendPause(false);
+  }
+}
+
+// Closing the tab shouldn't make someone wait out the firmware's timeout —
+// resume immediately if we were the one holding it paused.
+function resumeOnUnload() {
+  if (pauseActive) sendPause(false);
+}
+window.addEventListener("pagehide", resumeOnUnload);
+window.addEventListener("beforeunload", resumeOnUnload);
+
+function appendPauseNote(panel) {
+  const note = document.createElement("p");
+  note.className = "pause-note";
+  note.textContent = "The sensor's paused while you type, so it can't type your password in here by accident.";
+  panel.appendChild(note);
 }
 
 function selectTile(slot) {

@@ -93,7 +93,15 @@ def test_new_session_resets_counter():
     d._last_counter = 99
     d._on_connect()
     assert d._last_counter == 0
-    assert d._ser.written == [b"STATUS\n", b"INDEX\n", b"SETTINGS\n"]
+    # PAUSE 0 goes out first: a stale pause (page reload mid-naming, or this
+    # helper restarting) must never survive a reconnect.
+    assert d._ser.written == [b"PAUSE 0\n", b"STATUS\n", b"INDEX\n", b"SETTINGS\n"]
+
+
+def test_on_connect_always_sends_pause_0():
+    d = make_daemon()
+    d._on_connect()
+    assert b"PAUSE 0\n" in d._ser.written
 
 
 def test_log_event_caps_at_400():
@@ -529,6 +537,48 @@ def test_old_firmware_never_sends_settings_ok_state_stays_none():
     d = make_daemon()
     d.handle_line("STATUS_OK proto=1 fw=dt-0.1.0 sensor=ok cap=200")
     assert d.state["settings"] is None
+
+
+# -- Task 7s: PAUSE (device stops matching while a naming field is open) -----
+
+def test_state_defaults_to_unpaused():
+    d = make_daemon()
+    assert d.state["paused"] is False
+
+
+def test_pause_ok_1_sets_paused_true():
+    d = make_daemon()
+    d.handle_line("PAUSE_OK 1")
+    assert d.state["paused"] is True
+
+
+def test_pause_ok_0_sets_paused_false():
+    d = make_daemon()
+    d.state["paused"] = True
+    d.handle_line("PAUSE_OK 0")
+    assert d.state["paused"] is False
+
+
+def test_status_ok_parses_paused_true():
+    d = make_daemon()
+    d.handle_line("STATUS_OK proto=1 fw=dt-0.1.0 sensor=ok cap=200 paused=1")
+    assert d.state["paused"] is True
+
+
+def test_status_ok_parses_paused_false():
+    d = make_daemon()
+    d.state["paused"] = True
+    d.handle_line("STATUS_OK proto=1 fw=dt-0.1.0 sensor=ok cap=200 paused=0")
+    assert d.state["paused"] is False
+
+
+def test_status_ok_without_paused_field_leaves_it_unchanged():
+    # Old-firmware tolerance, same pattern as the settings fields: a reply
+    # missing paused= doesn't get guessed at.
+    d = make_daemon()
+    d.state["paused"] = True
+    d.handle_line("STATUS_OK proto=1 fw=dt-0.1.0 sensor=ok cap=200")
+    assert d.state["paused"] is True
 
 
 # -- security review fixes ---------------------------------------------------

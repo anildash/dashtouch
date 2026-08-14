@@ -213,6 +213,30 @@ def _make_handler(daemon, token):
                 self._json(200, result)
                 return
 
+            if self.path == "/api/pause":
+                # Token-gated like every other mutating route. Sent while a
+                # naming/renaming field is focused, so the device stops
+                # matching and can't type a password into a text box. See
+                # docs/protocol.md (PAUSE) and docs/security.md.
+                try:
+                    n = int(self.headers.get("Content-Length", 0))
+                    body = json.loads(self.rfile.read(n) or b"{}")
+                    paused = body["paused"]
+                except (ValueError, json.JSONDecodeError, AttributeError,
+                        TypeError, KeyError):
+                    daemon.log_event("web", "rejected: bad request")
+                    self._json(400, {"error": "bad request"})
+                    return
+                if not isinstance(paused, bool):
+                    daemon.log_event("web", "rejected: bad paused value")
+                    self._json(400, {"error": "paused must be a boolean"})
+                    return
+
+                daemon.send_command(f"PAUSE {1 if paused else 0}")
+                daemon.log_event("web", f"pause: set to {paused}")
+                self._json(202, {"ok": True})
+                return
+
             if self.path == "/api/settings":
                 try:
                     n = int(self.headers.get("Content-Length", 0))

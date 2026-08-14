@@ -235,6 +235,16 @@ void loop() {
   }
   s_lastPoll = millis();
 
+  // Paused (e.g. a naming/renaming field is focused in the web UI): skip
+  // the whole match scan — no GenImg poll, no ring change, no EV — so the
+  // device can't type a password into a text field. linkIsPaused() also
+  // auto-resumes after 90s of no PAUSE 1 refresh, so a dead helper can't
+  // leave the sensor deaf forever.
+  if (linkIsPaused()) {
+    delay(5);
+    return;
+  }
+
 #if DT_USE_WAKEUP_PIN
   // Optional: skip the UART round-trip entirely until WAKEUP asserts.
   if (digitalRead(DT_WAKEUP_PIN) != DT_WAKEUP_ACTIVE) return;

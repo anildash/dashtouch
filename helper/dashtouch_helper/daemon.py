@@ -61,7 +61,11 @@ class Daemon:
                       # success falsely. So health() must not assert the
                       # sensor is ok (or even definitively bad) while this
                       # is true; a power-cycle is the only way to know.
-                      "fp_swap_reboot_required": False}
+                      "fp_swap_reboot_required": False,
+                      # Mirrors the firmware's transient PAUSE state (see
+                      # docs/protocol.md). Updated from PAUSE_OK replies and
+                      # STATUS_OK's paused= field; never persisted.
+                      "paused": False}
 
     # -- connection lifecycle -----------------------------------------------
     def _on_connect(self) -> None:
@@ -70,6 +74,10 @@ class Daemon:
         polling logic remains simple."""
         self._last_counter = 0
         self.state["connected"] = True
+        # A stale pause (page reload mid-naming, or this helper itself
+        # restarting) must never survive a reconnect — clear it before
+        # anything else so the sensor is guaranteed live again.
+        self.send_command("PAUSE 0")
         self.send_command("STATUS")
         self.send_command("INDEX")
         self.send_command("SETTINGS")
@@ -197,6 +205,13 @@ class Daemon:
                     self.state["fw"] = tok.split("=", 1)[1]
                 if tok.startswith("cap="):
                     self.state["cap"] = tok.split("=", 1)[1]
+                if tok.startswith("paused="):
+                    self.state["paused"] = tok.split("=", 1)[1] == "1"
+        elif line.startswith("PAUSE_OK"):
+            self.log_event("device", line)
+            parts = line.split()
+            if len(parts) >= 2:
+                self.state["paused"] = parts[1] == "1"
         elif line.startswith("INDEX_OK "):
             print(f"device: {line}")
             self.log_event("device", line)

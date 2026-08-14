@@ -16,6 +16,13 @@ answers when your Mac asks, but "which window gets the keystrokes" is
 decided by macOS focus, not by us. Habit to build: touch the ring when
 you see a password prompt, not before.
 
+One field gets special treatment, because it's the one place this product
+itself invites you to type right after touching the sensor: naming a
+finger, right after enrollment, or renaming one later. The device actually
+stops matching for as long as that field is focused (see `PAUSE` in
+`docs/protocol.md`), so a stray touch there can't type your password into
+a name and have it saved to `~/.dashtouch/labels.json` in plain text.
+
 **If it happens anyway, here's the recovery, and it's fast.** Change
 your password in System Settings first, then run
 `.venv/bin/dashtouch password` — it prompts you twice, hidden, and

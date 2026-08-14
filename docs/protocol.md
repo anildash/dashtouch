@@ -43,7 +43,7 @@ where `canonical` is the exact line content before the hmac field:
 | Line | Meaning |
 | --- | --- |
 | `PING` → `PONG` | link check |
-| `STATUS` → `STATUS_OK proto=1 fw=<fw> sensor=<ok\|fail> cap=<n>` | versions + sensor state |
+| `STATUS` → `STATUS_OK proto=1 fw=<fw> sensor=<ok\|fail> cap=<n> paused=<0\|1>` | versions + sensor state |
 | `ENROLL <slot>` | start enrollment; device walks `ENROLL_WAIT_FINGER_1` → `ENROLL_REMOVE_FINGER` → `ENROLL_WAIT_FINGER_2` → `ENROLL_OK <slot>` / `ENROLL_FAIL <stage>` |
 | `DELETE <slot>` → `DELETE_OK <slot>` / `DELETE_FAIL <slot>` | remove a template |
 | `PW <gcmnonce> <ct>` | the one-time encrypted password answering the pending `EV` |
@@ -53,9 +53,27 @@ where `canonical` is the exact line content before the hmac field:
 | `SET press_enter <0\|1>` → `SET_OK press_enter <n>` | set whether Return is pressed after typing the password, and persist to NVS |
 | `SET fp_swap <0\|1>` → `SET_OK fp_swap <n>` | set the sensor UART's TX/RX pin orientation (0 = config.h's pins as declared, 1 = swapped) and persist to NVS; re-initializes the sensor UART and re-runs the handshake immediately, no reboot needed |
 | `SET <unknown key> ...` → `SET_FAIL <key>` | unrecognized settings key |
+| `PAUSE <0\|1>` → `PAUSE_OK <n>` / `PAUSE_FAIL` | pause (1) or resume (0) match scanning; transient session state, never persisted to NVS |
 
 Plaintext commands carry no secrets and trigger nothing a person at the
 device couldn't do by touching it.
+
+## Pause
+
+`PAUSE 1` stops the main loop's match scan entirely — no `GenImg` poll, no
+ring change to reading, no `EV` — until `PAUSE 0` or the auto-resume below.
+It does not touch enrollment or deletion; `ENROLL`/`DELETE` run normally
+while paused. Pause state is transient (RAM only, never written to NVS): a
+reboot always comes up unpaused, so a device can't get stuck deaf across a
+power cycle.
+
+**Auto-resume:** if no `PAUSE 1` refresh arrives within 90 seconds of the
+last one, the firmware clears the pause on its own. This is the safety net,
+not the mechanism — the web page is expected to refresh well inside that
+window (every 30s) for as long as a naming/renaming field stays open, and
+to send `PAUSE 0` itself on save/cancel/close. The 90s timeout only matters
+when the page can't get a message through at all (crashed helper, closed
+tab, dropped connection).
 
 ## Response encryption
 

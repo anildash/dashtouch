@@ -620,6 +620,12 @@ button:hover { filter: brightness(1.08); }
   padding-top: 1rem;
   border-top: 1px solid var(--line);
 }
+.pause-note {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: .85rem;
+}
 
 /* -- tool strip: Help / Under the hood, revealed on demand ------------ */
 .tool-strip { margin-top: 4px; }
