@@ -208,14 +208,14 @@ class Daemon:
                 if "=" not in tok:
                     continue
                 key, val = tok.split("=", 1)
-                if key == "press_enter":
+                if key in ("press_enter", "fp_swap"):
                     settings[key] = val == "1"
                 elif key in ("idle_color", "idle_style"):
                     try:
                         settings[key] = int(val)
                     except ValueError:
                         continue
-            if {"idle_color", "idle_style", "press_enter"} <= settings.keys():
+            if {"idle_color", "idle_style", "press_enter", "fp_swap"} <= settings.keys():
                 self.state["settings"] = settings
         elif line.startswith("SET_OK "):
             self.log_event("device", line)
@@ -223,9 +223,16 @@ class Daemon:
             if len(parts) >= 3:
                 key, val = parts[1], parts[2]
                 current = dict(self.state["settings"] or {})
-                if key == "press_enter":
+                if key in ("press_enter", "fp_swap"):
                     current[key] = val == "1"
                     self.state["settings"] = current
+                    if key == "fp_swap":
+                        # The device just re-initialized the sensor UART and
+                        # re-ran the handshake on its own — ask for a fresh
+                        # STATUS so the Checkup's Sensor row reflects whether
+                        # that orientation actually works, without waiting
+                        # for the next poll.
+                        self.send_command("STATUS")
                 elif key in ("idle_color", "idle_style"):
                     try:
                         current[key] = int(val)

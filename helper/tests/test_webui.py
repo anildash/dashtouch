@@ -646,3 +646,30 @@ def test_settings_press_enter_coerces_false_variants():
                         {"key": "press_enter", "value": value}, token)
         assert status == 202
         assert d.sent == ["SET press_enter 0"]
+
+
+# -- Task 7n: fp_swap (device-stored sensor pin orientation) ----------------
+
+def test_settings_fp_swap_coerces_true_variants():
+    for value in (True, 1, "1"):
+        d, host, port, token = start()
+        status, _ = req(host, port, "POST", "/api/settings",
+                        {"key": "fp_swap", "value": value}, token)
+        assert status == 202
+        assert d.sent == ["SET fp_swap 1"]
+
+
+def test_settings_fp_swap_coerces_false_variants():
+    for value in (False, 0, "0"):
+        d, host, port, token = start()
+        status, _ = req(host, port, "POST", "/api/settings",
+                        {"key": "fp_swap", "value": value}, token)
+        assert status == 202
+        assert d.sent == ["SET fp_swap 0"]
+
+
+def test_settings_fp_swap_requires_token():
+    d, host, port, token = start()
+    status, _ = req(host, port, "POST", "/api/settings", {"key": "fp_swap", "value": 1})
+    assert status == 403
+    assert d.sent == []

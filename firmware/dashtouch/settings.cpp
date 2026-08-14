@@ -6,6 +6,7 @@ static Preferences s_prefs;
 static uint8_t s_idleColor = 3;   // 3 = purple, until settingsInit() loads NVS
 static uint8_t s_idleStyle = 1;   // 1 = steady
 static bool s_pressEnter = DT_PRESS_ENTER;
+static bool s_fpSwap = false;  // false = config.h's pins, as declared
 
 void settingsInit() {
   s_prefs.begin("dashtouch", false);
@@ -16,11 +17,15 @@ void settingsInit() {
   // config.h's DT_PRESS_ENTER is the factory default only — once a value
   // has been stored (by a SET command), the stored value wins.
   s_pressEnter = s_prefs.getBool("press_enter", DT_PRESS_ENTER);
+  // Default false: use config.h's pins as declared. Once `dashtouch pins
+  // --swap` stores true, that wins — config.h stays the factory default.
+  s_fpSwap = s_prefs.getBool("fp_swap", false);
 }
 
 uint8_t settingsIdleColor() { return s_idleColor; }
 uint8_t settingsIdleStyle() { return s_idleStyle; }
 bool settingsPressEnter() { return s_pressEnter; }
+bool settingsFpSwap() { return s_fpSwap; }
 
 bool settingsSetIdleColor(uint8_t v) {
   if (v > 7) return false;
@@ -39,4 +44,9 @@ bool settingsSetIdleStyle(uint8_t v) {
 void settingsSetPressEnter(bool v) {
   s_pressEnter = v;
   s_prefs.putBool("press_enter", v);
+}
+
+void settingsSetFpSwap(bool v) {
+  s_fpSwap = v;
+  s_prefs.putBool("fp_swap", v);
 }

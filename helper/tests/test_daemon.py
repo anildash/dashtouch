@@ -403,41 +403,97 @@ def test_settings_defaults_to_none_until_seen():
 
 def test_settings_ok_parses_all_three_keys():
     d = make_daemon()
-    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1")
-    assert d.state["settings"] == {"idle_color": 3, "idle_style": 1, "press_enter": True}
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1 fp_swap=0")
+    assert d.state["settings"] == {
+        "idle_color": 3, "idle_style": 1, "press_enter": True, "fp_swap": False}
 
 
 def test_settings_ok_parses_press_enter_false():
     d = make_daemon()
-    d.handle_line("SETTINGS_OK idle_color=0 idle_style=2 press_enter=0")
-    assert d.state["settings"] == {"idle_color": 0, "idle_style": 2, "press_enter": False}
+    d.handle_line("SETTINGS_OK idle_color=0 idle_style=2 press_enter=0 fp_swap=0")
+    assert d.state["settings"] == {
+        "idle_color": 0, "idle_style": 2, "press_enter": False, "fp_swap": False}
 
 
 def test_set_ok_updates_idle_color_in_existing_settings():
     d = make_daemon()
-    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1")
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1 fp_swap=0")
     d.handle_line("SET_OK idle_color 6")
-    assert d.state["settings"] == {"idle_color": 6, "idle_style": 1, "press_enter": True}
+    assert d.state["settings"] == {
+        "idle_color": 6, "idle_style": 1, "press_enter": True, "fp_swap": False}
 
 
 def test_set_ok_updates_idle_style_in_existing_settings():
     d = make_daemon()
-    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1")
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1 fp_swap=0")
     d.handle_line("SET_OK idle_style 2")
-    assert d.state["settings"] == {"idle_color": 3, "idle_style": 2, "press_enter": True}
+    assert d.state["settings"] == {
+        "idle_color": 3, "idle_style": 2, "press_enter": True, "fp_swap": False}
 
 
 def test_set_ok_updates_press_enter_in_existing_settings():
     d = make_daemon()
-    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1")
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1 fp_swap=0")
     d.handle_line("SET_OK press_enter 0")
-    assert d.state["settings"] == {"idle_color": 3, "idle_style": 1, "press_enter": False}
+    assert d.state["settings"] == {
+        "idle_color": 3, "idle_style": 1, "press_enter": False, "fp_swap": False}
 
 
 def test_set_ok_before_any_settings_ok_starts_from_empty():
     d = make_daemon()
     d.handle_line("SET_OK idle_color 4")
     assert d.state["settings"] == {"idle_color": 4}
+
+
+# -- Task 7n: fp_swap (device-stored sensor pin orientation) ----------------
+
+def test_settings_ok_parses_fp_swap_true():
+    d = make_daemon()
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1 fp_swap=1")
+    assert d.state["settings"] == {
+        "idle_color": 3, "idle_style": 1, "press_enter": True, "fp_swap": True}
+
+
+def test_settings_ok_parses_fp_swap_false():
+    d = make_daemon()
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1 fp_swap=0")
+    assert d.state["settings"]["fp_swap"] is False
+
+
+def test_settings_ok_missing_fp_swap_leaves_settings_none():
+    # Mirrors the old-firmware guard: a reply missing any of the four
+    # known keys shouldn't produce a half-populated settings dict.
+    d = make_daemon()
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1")
+    assert d.state["settings"] is None
+
+
+def test_set_ok_updates_fp_swap_in_existing_settings():
+    d = make_daemon()
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1 fp_swap=0")
+    d.handle_line("SET_OK fp_swap 1")
+    assert d.state["settings"] == {
+        "idle_color": 3, "idle_style": 1, "press_enter": True, "fp_swap": True}
+
+
+def test_set_ok_fp_swap_requests_fresh_status():
+    # SET_OK fp_swap means the device already re-initialized the sensor
+    # UART and re-ran the handshake on its own — the daemon should ask for
+    # a fresh STATUS so the Checkup's Sensor row reflects it right away.
+    d = make_daemon()
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1 fp_swap=0")
+    d.handle_line("SET_OK fp_swap 1")
+    sent = [msg for msg in d._ser.written]
+    assert any(b"STATUS\n" in msg for msg in sent)
+
+
+def test_set_ok_idle_color_does_not_request_status():
+    d = make_daemon()
+    d.handle_line("SETTINGS_OK idle_color=3 idle_style=1 press_enter=1 fp_swap=0")
+    before = list(d._ser.written)
+    d.handle_line("SET_OK idle_color 5")
+    after = d._ser.written
+    assert after[len(before):] == []
 
 
 def test_old_firmware_never_sends_settings_ok_state_stays_none():

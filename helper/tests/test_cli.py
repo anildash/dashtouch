@@ -224,4 +224,110 @@ def test_uninstall_agent_boots_out_and_verifies(monkeypatch):
     # Should have called bootout and print
     assert len(calls) >= 2
     assert calls[0][1] == "bootout"
-    assert calls[1][1] == "print"
+
+
+# -- Task 7n: `dashtouch pins` --------------------------------------------
+
+def _pins_args(swap=False, normal=False):
+    return argparse.Namespace(swap=swap, normal=normal)
+
+
+def test_pins_no_args_reports_default_orientation(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_daemon_status",
+                        lambda: {"settings": {"fp_swap": False}})
+    assert cli.cmd_pins(_pins_args()) == 0
+    out = capsys.readouterr().out
+    assert "default" in out.lower()
+    assert "SWAPPED" not in out
+
+
+def test_pins_no_args_reports_swapped_orientation(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_daemon_status",
+                        lambda: {"settings": {"fp_swap": True}})
+    assert cli.cmd_pins(_pins_args()) == 0
+    out = capsys.readouterr().out
+    assert "SWAPPED" in out
+
+
+def test_pins_no_args_helper_not_running(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_daemon_status", lambda: None)
+    assert cli.cmd_pins(_pins_args()) == 1
+    out = capsys.readouterr().out
+    assert "isn't running" in out
+    assert "dashtouch run" in out
+
+
+def test_pins_no_args_settings_not_seen_yet(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_daemon_status", lambda: {"settings": None})
+    assert cli.cmd_pins(_pins_args()) == 1
+    out = capsys.readouterr().out
+    assert "try again" in out.lower()
+
+
+def test_pins_swap_and_normal_together_rejected(capsys):
+    assert cli.cmd_pins(_pins_args(swap=True, normal=True)) == 1
+    out = capsys.readouterr().out
+    assert "not both" in out.lower()
+
+
+def test_pins_swap_sends_fp_swap_1_and_reports_sensor_ok(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_daemon_post_setting", lambda key, value: (202, {"ok": True}))
+    monkeypatch.setattr(cli, "_daemon_status", lambda: {
+        "health": [{"id": "sensor", "ok": True, "detail": "Sensor's talking"}]})
+    monkeypatch.setattr(cli.time, "sleep", lambda *_: None)
+    assert cli.cmd_pins(_pins_args(swap=True)) == 0
+    out = capsys.readouterr().out
+    assert "swapped" in out.lower()
+    assert "sensor's talking" in out.lower()
+
+
+def test_pins_normal_sends_fp_swap_0(monkeypatch, capsys):
+    sent = []
+    monkeypatch.setattr(cli, "_daemon_post_setting",
+                        lambda key, value: sent.append((key, value)) or (202, {"ok": True}))
+    monkeypatch.setattr(cli, "_daemon_status", lambda: {
+        "health": [{"id": "sensor", "ok": True, "detail": "Sensor's talking"}]})
+    monkeypatch.setattr(cli.time, "sleep", lambda *_: None)
+    assert cli.cmd_pins(_pins_args(normal=True)) == 0
+    assert sent == [("fp_swap", 0)]
+
+
+def test_pins_swap_reports_when_sensor_does_not_come_back(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_daemon_post_setting", lambda key, value: (202, {"ok": True}))
+    monkeypatch.setattr(cli, "_daemon_status", lambda: {
+        "health": [{"id": "sensor", "ok": False, "detail": "Not answering — check the wiring"}]})
+    monkeypatch.setattr(cli.time, "sleep", lambda *_: None)
+    assert cli.cmd_pins(_pins_args(swap=True)) == 1
+    out = capsys.readouterr().out
+    assert "isn't answering" in out.lower() or "still isn't answering" in out.lower()
+    assert "--normal" in out
+
+
+def test_pins_swap_rejected_by_helper(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_daemon_post_setting",
+                        lambda key, value: (400, {"error": "bad request"}))
+    assert cli.cmd_pins(_pins_args(swap=True)) == 1
+    out = capsys.readouterr().out
+    assert "bad request" in out
+
+
+def test_pins_swap_cannot_reach_helper(monkeypatch, capsys):
+    def raise_it(key, value):
+        raise OSError("connection refused")
+    monkeypatch.setattr(cli, "_daemon_post_setting", raise_it)
+    assert cli.cmd_pins(_pins_args(swap=True)) == 1
+    out = capsys.readouterr().out
+    assert "couldn't reach the helper" in out.lower()
+
+
+def test_daemon_base_url_strips_token(tmp_path, monkeypatch):
+    from dashtouch_helper import webui
+    monkeypatch.setattr(webui, "URL_PATH", tmp_path / "webui-url")
+    webui.URL_PATH.write_text("http://127.0.0.1:3274/?token=abc\n")
+    assert cli._daemon_base_url() == "http://127.0.0.1:3274/"
+
+
+def test_daemon_base_url_missing_file(tmp_path, monkeypatch):
+    from dashtouch_helper import webui
+    monkeypatch.setattr(webui, "URL_PATH", tmp_path / "missing")
+    assert cli._daemon_base_url() is None

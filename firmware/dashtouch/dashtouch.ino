@@ -77,6 +77,35 @@ static void doEnroll(uint16_t slot) {
   ledSet(DT_LED_IDLE);
 }
 
+// Selects the sensor UART pins per the stored fp_swap setting and
+// (re)starts FingerSerial on them. Shared by setup() and the fp_swap
+// SET handler so there's exactly one place pin orientation is decided.
+static void initSensorUart() {
+  bool fpSwap = settingsFpSwap();
+  int rxPin = fpSwap ? DT_FP_TX_PIN : DT_FP_RX_PIN;
+  int txPin = fpSwap ? DT_FP_RX_PIN : DT_FP_TX_PIN;
+  FingerSerial.end();
+  Sensor.begin(FingerSerial, rxPin, txPin, DT_UART_BAUD);
+}
+
+// Called after `SET fp_swap <n>` persists the new value. Re-initializes
+// the sensor UART with the new orientation and re-runs the handshake
+// immediately, so the person setting it learns right away whether that
+// orientation works — no reboot needed. Only the sensor UART is
+// affected; the USB CDC link to the Mac (and this printf) are untouched.
+static void doFpSwapChanged() {
+  initSensorUart();
+  g_sensorOk = (Sensor.verifyPassword() == 0);
+  if (g_sensorOk) {
+    Sensor.readSysPara(&g_capacity, nullptr);
+    ledSet(DT_LED_IDLE);
+    boardLedRed(false);
+  } else {
+    ledSet(DT_LED_BOOT_FAIL);
+    boardLedRed(true);
+  }
+}
+
 static void doDelete(uint16_t slot) {
   if (Sensor.deleteTemplate(slot) == 0)
     Serial.printf("DELETE_OK %u\n", slot);
@@ -164,12 +193,13 @@ void setup() {
   pinMode(DT_WAKEUP_PIN, INPUT);
 #endif
 
-  settingsInit();  // load idle_color/idle_style/press_enter before the first ledSet
+  settingsInit();  // load idle_color/idle_style/press_enter/fp_swap before the first ledSet
 
-  Sensor.begin(FingerSerial, DT_FP_RX_PIN, DT_FP_TX_PIN, DT_UART_BAUD);
+  initSensorUart();  // honors the stored fp_swap orientation
   ledInit(&Sensor);
   linkOnEnroll = doEnroll;
   linkOnDelete = doDelete;
+  linkOnFpSwapChanged = doFpSwapChanged;
 
   Serial.printf("BOOT dashtouch %s proto=1\n", DT_FW_VERSION);
 

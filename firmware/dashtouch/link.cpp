@@ -15,6 +15,7 @@ extern R503 Sensor;
 
 void (*linkOnEnroll)(uint16_t) = nullptr;
 void (*linkOnDelete)(uint16_t) = nullptr;
+void (*linkOnFpSwapChanged)() = nullptr;
 
 static uint32_t s_counter = 0;
 static uint8_t s_lastNonce[16];
@@ -141,9 +142,9 @@ void linkHandleCommand(const String& line) {
     else
       Serial.println("DELETE_FAIL badslot");
   } else if (line == "SETTINGS") {
-    Serial.printf("SETTINGS_OK idle_color=%u idle_style=%u press_enter=%u\n",
+    Serial.printf("SETTINGS_OK idle_color=%u idle_style=%u press_enter=%u fp_swap=%u\n",
                   settingsIdleColor(), settingsIdleStyle(),
-                  settingsPressEnter() ? 1 : 0);
+                  settingsPressEnter() ? 1 : 0, settingsFpSwap() ? 1 : 0);
   } else if (line.startsWith("SET ")) {
     // "SET <key> <value>"
     String rest = line.substring(4);
@@ -169,6 +170,13 @@ void linkHandleCommand(const String& line) {
       bool v = (val != 0);
       settingsSetPressEnter(v);
       Serial.printf("SET_OK press_enter %u\n", v ? 1 : 0);
+    } else if (key == "fp_swap") {
+      bool v = (val != 0);
+      settingsSetFpSwap(v);
+      // Re-init the sensor UART with the new orientation and re-run the
+      // handshake right now — no reboot required to find out if it works.
+      if (linkOnFpSwapChanged) linkOnFpSwapChanged();
+      Serial.printf("SET_OK fp_swap %u\n", v ? 1 : 0);
     } else {
       Serial.printf("SET_FAIL %s\n", key.c_str());
     }

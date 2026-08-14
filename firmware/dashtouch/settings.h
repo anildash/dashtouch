@@ -16,9 +16,17 @@ uint8_t settingsIdleColor();
 // idle_color is 0 — dark is dark either way.
 uint8_t settingsIdleStyle();
 bool settingsPressEnter();
+// fp_swap: false (factory default) = wire up the sensor UART exactly as
+// config.h declares (DT_FP_TX_PIN/DT_FP_RX_PIN, the silkscreen values).
+// true = swap them — transmit on DT_FP_RX_PIN, receive on DT_FP_TX_PIN.
+// Only the sensor UART is affected; the USB CDC link to the Mac never
+// changes, so a wrong setting here is always recoverable over USB. See
+// docs/history/2026-08-12-qtpy-uart-fault.md for why this exists.
+bool settingsFpSwap();
 
 // Setters validate and persist; return false (and leave the stored value
 // unchanged) on an out-of-range input.
 bool settingsSetIdleColor(uint8_t v);
 bool settingsSetIdleStyle(uint8_t v);
 void settingsSetPressEnter(bool v);
+void settingsSetFpSwap(bool v);

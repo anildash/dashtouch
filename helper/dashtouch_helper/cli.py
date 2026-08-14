@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import json
 import os
 import pathlib
 import secrets as pysecrets
 import shutil
 import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 import webbrowser
 
 from . import daemon as daemon_mod
@@ -196,6 +200,119 @@ def cmd_enroll(args) -> int:
     return 0
 
 
+def _daemon_base_url() -> str | None:
+    """The running helper's base URL (with a trailing slash, no token),
+    read from the file `dashtouch run` writes on startup. None if the
+    helper has never run or that file is missing."""
+    try:
+        url = webui.URL_PATH.read_text().strip()
+    except FileNotFoundError:
+        return None
+    if not url:
+        return None
+    return url.split("?")[0]
+
+
+def _daemon_status() -> dict | None:
+    """GET /api/status from the running helper. None if the helper isn't
+    reachable — that file existing doesn't guarantee it's still running."""
+    base = _daemon_base_url()
+    if not base:
+        return None
+    try:
+        with urllib.request.urlopen(base + "api/status", timeout=3) as resp:
+            return json.loads(resp.read())
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+
+
+def _daemon_post_setting(key: str, value: int) -> tuple[int, dict]:
+    """POST /api/settings against the running helper. Raises on any
+    transport failure — callers decide how to report that."""
+    base = _daemon_base_url()
+    token = webui.TOKEN_PATH.read_text().strip()
+    req = urllib.request.Request(
+        base + "api/settings",
+        data=json.dumps({"key": key, "value": value}).encode(),
+        headers={"Content-Type": "application/json", "X-DT-Token": token},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=3) as resp:
+        return resp.status, json.loads(resp.read())
+
+
+def cmd_pins(args) -> int:
+    """Check or change which pair of pins the sensor UART uses. Some
+    boards' QT Py can't transmit on the default pad (see
+    docs/history/2026-08-12-qtpy-uart-fault.md) — this used to mean
+    hand-editing firmware/dashtouch/config.h, a change that was easy to
+    lose and once nearly bricked a sensor on reflash. Now it's a setting
+    stored on the device itself. Only the sensor wiring is affected; the
+    USB link to this Mac never changes, so it's always safe to try."""
+    if args.swap and args.normal:
+        print("Pick one: --swap or --normal, not both.")
+        return 1
+
+    if not (args.swap or args.normal):
+        status = _daemon_status()
+        if status is None:
+            print("The helper isn't running — start it with `.venv/bin/dashtouch run`,")
+            print("then run `dashtouch pins` again to see the current orientation.")
+            return 1
+        settings = status.get("settings") or {}
+        if "fp_swap" not in settings:
+            print("Still waiting on the device's own settings reply — try again in a")
+            print("moment.")
+            return 1
+        if settings["fp_swap"]:
+            print("Sensor pins are SWAPPED: the gadget transmits on the pad labeled RX")
+            print("and receives on the pad labeled TX.")
+        else:
+            print("Sensor pins are at their default orientation: transmit on TX,")
+            print("receive on RX (the silkscreen labels).")
+        print()
+        print("Some boards can't transmit on the default TX pad. `dashtouch pins")
+        print("--swap` moves the sensor UART to the other pair, on the spot, no")
+        print("reflash needed.")
+        return 0
+
+    want_swap = bool(args.swap)
+    print("Some boards can't transmit on the default TX pad — this moves the sensor")
+    print("UART to the other pair. Only the sensor wiring changes; the USB link to")
+    print("this Mac never does, so it's always safe to try.\n")
+
+    try:
+        status_code, body = _daemon_post_setting("fp_swap", 1 if want_swap else 0)
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        print(f"Couldn't reach the helper: {e}")
+        print("Is it running? `.venv/bin/dashtouch run` starts it.")
+        return 1
+    if status_code != 202:
+        print(f"The helper turned that down: {body.get('error', body)}")
+        return 1
+
+    print(f"Set — pins are now {'swapped' if want_swap else 'at their default orientation'}.")
+    print("Giving the sensor a moment to come back...")
+    time.sleep(1.0)
+
+    status = _daemon_status()
+    sensor_row = None
+    if status is not None:
+        sensor_row = next((r for r in status.get("health", []) if r.get("id") == "sensor"), None)
+    if sensor_row is None:
+        print("Couldn't check whether the sensor came back — open the web UI to see.")
+        return 1
+    if sensor_row.get("ok"):
+        print("The sensor's talking — that orientation works.")
+        return 0
+    print(f"The sensor still isn't answering ({sensor_row.get('detail', 'no detail')}).")
+    if want_swap:
+        print("Try the default orientation instead: `dashtouch pins --normal`")
+    else:
+        print("Try the swapped orientation instead: `dashtouch pins --swap`")
+    return 1
+
+
 def cmd_doctor(args) -> int:
     print("Dashboard Touch check-up\n")
     try:
@@ -295,9 +412,15 @@ def main() -> None:
     p_password = sub.add_parser("password", help="change the password Dashboard Touch types")
     p_password.add_argument("--password", help=argparse.SUPPRESS)
     sub.add_parser("pairing", help="rotate the pairing key (needs a reflash)")
+    p_pins = sub.add_parser("pins", help="check or change the sensor's TX/RX pin orientation")
+    p_pins.add_argument("--swap", action="store_true",
+                        help="swap the sensor UART pins (for boards that can't transmit on the default one)")
+    p_pins.add_argument("--normal", action="store_true",
+                        help="use the default (silkscreen) pin orientation")
     args = p.parse_args()
     rc = {"setup": cmd_setup, "run": cmd_run, "enroll": cmd_enroll,
           "doctor": cmd_doctor, "install-agent": cmd_install_agent,
           "uninstall-agent": cmd_uninstall_agent,
-          "password": cmd_password, "pairing": cmd_pairing}[args.cmd](args)
+          "password": cmd_password, "pairing": cmd_pairing,
+          "pins": cmd_pins}[args.cmd](args)
     sys.exit(rc)

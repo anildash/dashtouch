@@ -235,6 +235,8 @@ def _make_handler(daemon, token):
                         return
                 elif key == "press_enter":
                     n_val = 1 if raw_value in (True, 1, "1") else 0
+                elif key == "fp_swap":
+                    n_val = 1 if raw_value in (True, 1, "1") else 0
                 else:
                     daemon.log_event("web", f"rejected: unknown settings key '{key}'")
                     self._json(400, {"error": "unknown key"})

@@ -19,9 +19,12 @@ The firmware can't talk to the sensor. In order:
 4. **Rare, but real: the board itself.** One known QT Py unit cannot
    transmit on its `TX` pad at all. [firmware/diagnostics/](../firmware/diagnostics/README.md)
    has `fp_loopback`, which settles it in two minutes with a single jumper
-   wire — if it shows zeros flooding in one direction, open
-   `firmware/dashtouch/config.h` and swap the two pin numbers (the comment
-   shows you exactly where).
+   wire — if it shows zeros flooding in one direction, run
+   `.venv/bin/dashtouch pins --swap`. It moves the sensor UART to the
+   other pin pair on the spot, no reflash needed, and tells you right
+   away whether the sensor comes back. Only the sensor wiring is
+   affected — the USB link to your Mac never changes — so it's always
+   safe to try.
 
 ## The board seems completely dead
 
