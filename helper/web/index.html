@@ -7,14 +7,6 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <svg aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
-    <symbol id="fp-mark" viewBox="0 0 16 16">
-      <path d="M5.95 13.64 A6 6 0 0 1 5.95 2.36" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
-      <path d="M6.46 12.23 A4.5 4.5 0 0 1 6.46 3.77" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
-      <path d="M6.97 10.82 A3 3 0 0 1 6.97 5.18" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
-      <path d="M7.6 7c.9.4.9 1.6 0 2" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
-    </symbol>
-  </svg>
   <main>
     <h1>Dashboard Touch</h1>
     <div id="banner" class="banner" role="alert" hidden></div>
@@ -54,16 +46,14 @@
       <div class="main-col">
         <section class="card" id="fingers-card">
           <h2>Your fingers</h2>
-          <p class="hint">Each fingerprint lives in its own numbered slot on the
-          sensor itself &mdash; your Mac never sees the prints. Pick a slot, give it
-          a name you'll recognize, and follow the ring.</p>
-          <div id="enroll-form">
-            <label>Slot <select id="slot"></select></label>
-            <label>Name <input id="label" type="text" placeholder="right index"></label>
-            <button id="enroll">Add this finger</button>
-          </div>
+          <p class="hint">Each fingerprint lives on the sensor itself &mdash;
+          your Mac never sees the prints. Add a finger and follow the ring;
+          you'll name it once it's stored.</p>
+          <div class="finger-row" id="finger-row"></div>
+          <p class="hint finger-limit-hint" id="finger-limit-hint" hidden>There's
+          no room for another finger &mdash; remove one first.</p>
+          <div class="finger-panel" id="finger-panel" hidden></div>
           <p id="progress"></p>
-          <ul id="slots"></ul>
         </section>
 
         <div class="tool-strip" id="tool-strip">

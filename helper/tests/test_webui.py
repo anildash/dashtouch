@@ -295,9 +295,10 @@ def test_api_label_updates_labels(tmp_path, monkeypatch):
                        {"slot": 3, "label": "middle"}, token=token)
     assert status == 202
 
-    # Check that label was written
+    # Check that label was written in object form with a fresh timestamp
     labels = json.loads((tmp_path / "labels.json").read_text())
-    assert labels["3"] == "middle"
+    assert labels["3"]["label"] == "middle"
+    assert labels["3"]["added"] > 0
 
 
 def test_api_label_slot_out_of_range(tmp_path, monkeypatch):
@@ -317,3 +318,63 @@ def test_api_label_slot_out_of_range(tmp_path, monkeypatch):
     status, body = req(host, port, "POST", "/api/label",
                        {"slot": 201, "label": "invalid"}, token=token)
     assert status == 400
+
+
+def test_old_format_string_label_loads_and_is_readable(tmp_path, monkeypatch):
+    """A bare slot->string entry (the pre-Task-7i format) is tolerated: the
+    loader upgrades it to {"label": str, "added": 0.0} in memory without
+    requiring the user's on-disk file to be migrated first."""
+    from dashtouch_helper import webui
+    monkeypatch.setattr(webui, "LABELS_PATH", tmp_path / "labels.json")
+    (tmp_path / "labels.json").write_text(json.dumps({"3": "right index"}))
+    d = FakeDaemon()
+    d.state["slots_used"] = [3]
+    url = webui.start(d, port=0)
+    host, port = url.split("//")[1].split("/")[0].split(":")
+    port = int(port)
+
+    status, body = req(host, port, "GET", "/api/status")
+    assert status == 200
+    assert body["slots"]["3"] == {"label": "right index", "added": 0.0}
+
+
+def test_rename_preserves_added_timestamp(tmp_path, monkeypatch):
+    """Renaming an already-labeled slot keeps its original `added` value —
+    only the label text changes."""
+    from dashtouch_helper import webui
+    monkeypatch.setattr(webui, "LABELS_PATH", tmp_path / "labels.json")
+    webui.save_label(3, "right index")
+    original = json.loads((tmp_path / "labels.json").read_text())["3"]["added"]
+
+    d = FakeDaemon()
+    url = webui.start(d, port=0)
+    host, port = url.split("//")[1].split("/")[0].split(":")
+    token = url.split("token=")[1]
+    port = int(port)
+
+    status, _ = req(host, port, "POST", "/api/label",
+                    {"slot": 3, "label": "right index finger"}, token=token)
+    assert status == 202
+    labels = json.loads((tmp_path / "labels.json").read_text())
+    assert labels["3"]["label"] == "right index finger"
+    assert labels["3"]["added"] == original
+
+
+def test_enrolled_but_unlabeled_slot_still_appears_in_status(tmp_path, monkeypatch):
+    """A slot enrolled outside the page (e.g. over serial) has no
+    labels.json entry at all, but must still show up via slots_used so the
+    page can render it as an "Unnamed" tile."""
+    from dashtouch_helper import webui
+    monkeypatch.setattr(webui, "LABELS_PATH", tmp_path / "labels.json")
+    webui.save_label(1, "thumb")
+    d = FakeDaemon()
+    d.state["slots_used"] = [1, 7]  # slot 7 has no label entry
+    url = webui.start(d, port=0)
+    host, port = url.split("//")[1].split("/")[0].split(":")
+    port = int(port)
+
+    status, body = req(host, port, "GET", "/api/status")
+    assert status == 200
+    assert body["slots_used"] == [1, 7]
+    assert "7" not in body["slots"]
+    assert body["slots"]["1"]["label"] == "thumb"

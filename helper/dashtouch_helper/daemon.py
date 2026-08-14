@@ -113,8 +113,11 @@ class Daemon:
             print(f"device: {line}")
             self.log_event("device", line)
             if line.startswith("ENROLL_OK"):
-                # Save pending label if it matches this slot
-                if self.pending_label:
+                # Save pending label if it matches this slot. A blank label
+                # means the page's own naming step hasn't run yet (naming
+                # happens after enrollment now) — leave the slot unlabeled
+                # rather than writing an empty name.
+                if self.pending_label and self.pending_label.get("label"):
                     # Extract slot from line: "ENROLL_OK <slot>"
                     parts = line.split()
                     if len(parts) >= 2:

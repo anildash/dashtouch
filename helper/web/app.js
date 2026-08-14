@@ -1,6 +1,13 @@
 const token = new URLSearchParams(location.search).get("token");
 let enrolling = false;
 let logInterval = null;
+let lastStatus = null;
+
+// -- finger tile row: which slot (if any) is mid-enrollment, being named
+// for the first time, or expanded for rename/remove.
+let pendingSlot = null;
+let namingSlot = null;
+let selectedSlot = null;
 
 // -- tool strip: Help / Under the hood open on demand, one at a time -------
 let activeTab = null; // "help" | "debug" | null
@@ -133,10 +140,10 @@ function computeRingState(s) {
       if (s.last_match) {
         const slotNum = s.last_match.slot;
         const slotKey = String(slotNum);
-        if (s.slots && s.slots[slotKey]) {
-          matchLabel = `That's your ${s.slots[slotKey]}`;
+        if (s.slots && s.slots[slotKey] && s.slots[slotKey].label) {
+          matchLabel = `That's your ${s.slots[slotKey].label}`;
         } else {
-          matchLabel = `That's slot ${slotNum}`;
+          matchLabel = "That's a match";
         }
       }
       return {cls: flashCls, label: matchLabel};
@@ -181,144 +188,212 @@ function isMatchFlashActive() {
   return flashCls === "ring--match" && (Date.now() - flashStartedAt < FLASH_MS);
 }
 
-// -- slot dropdown: truthful list of FREE slots, from the sensor's own ----
-// index table (slots_used), not a guess based on local labels.
-let lastFreeKey = null;
-
-function updateSlotSelect(s) {
+// -- finger tile row: macOS Touch-ID-style tiles, no slot numbers in sight -
+// The page always picks the lowest free slot itself from slots_used —
+// there's no picker for the user.
+function lowestFreeSlot(s) {
   const used = new Set(s.slots_used || []);
-  const free = [];
-  for (let i = 1; i <= 200; i++) if (!used.has(i)) free.push(i);
-  const key = free.join(",");
-  if (key === lastFreeKey) return; // unchanged — leave the user's pick alone
-  lastFreeKey = key;
-
-  const select = document.getElementById("slot");
-  const addBtn = document.getElementById("enroll");
-  const prev = select.value;
-  select.innerHTML = "";
-  if (free.length === 0) {
-    const opt = document.createElement("option");
-    opt.value = "";
-    opt.textContent = "All 200 slots are spoken for — remove one first";
-    opt.disabled = true;
-    select.appendChild(opt);
-    addBtn.disabled = true;
-    return;
-  }
-  addBtn.disabled = false;
-  for (const n of free) {
-    const opt = document.createElement("option");
-    opt.value = String(n);
-    opt.textContent = String(n);
-    select.appendChild(opt);
-  }
-  // Keep the previous pick if it's still free; otherwise the first option
-  // (the lowest free slot) is selected by default.
-  if (free.includes(Number(prev))) select.value = prev;
+  for (let i = 1; i <= 200; i++) if (!used.has(i)) return i;
+  return null;
 }
 
-// -- enrolled list: union of device truth (slots_used) and local labels ---
-// A used slot with no label (enrolled from the device itself) still shows.
-function updateSlotList(s) {
+// Named fingers first, oldest-added first (legacy string-format entries
+// carry added=0.0 from the loader, so they sort to the very front).
+// Fingers enrolled outside the page (no labels.json entry) come after,
+// ordered by slot, shown as "Unnamed".
+function sortedFingers(s) {
   const labels = s.slots || {};
-  const seen = new Set((s.slots_used || []).map(String));
-  for (const k of Object.keys(labels)) seen.add(k);
-  const rows = Array.from(seen, Number).sort((a, b) => a - b);
+  const used = new Set((s.slots_used || []).map(String));
+  const named = [];
+  const unnamed = [];
+  for (const k of used) {
+    const entry = labels[k];
+    if (entry) named.push({slot: Number(k), label: entry.label, added: entry.added});
+    else unnamed.push({slot: Number(k)});
+  }
+  named.sort((a, b) => a.added - b.added);
+  unnamed.sort((a, b) => a.slot - b.slot);
+  return named.concat(unnamed.map((u) => ({slot: u.slot, label: null})));
+}
+
+function renderFingerRow(s) {
+  const row = document.getElementById("finger-row");
+  row.innerHTML = "";
 
   const matchSlot = s.last_match ? s.last_match.slot : null;
   const matchLive = isMatchFlashActive();
 
-  const ul = document.getElementById("slots");
-  ul.innerHTML = "";
-  for (const slot of rows) {
-    const label = labels[String(slot)];
-    const li = document.createElement("li");
+  for (const f of sortedFingers(s)) {
+    if (f.slot === pendingSlot) continue; // shown as the pending tile instead
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "finger-tile"
+      + (f.slot === selectedSlot ? " finger-tile--selected" : "")
+      + (matchLive && f.slot === matchSlot ? " finger-tile--match" : "");
+    const glyph = document.createElement("span");
+    glyph.className = "finger-glyph";
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.textContent = "🫆";
+    const name = document.createElement("span");
+    name.className = "finger-name";
+    name.textContent = f.label || "Unnamed";
+    tile.appendChild(glyph);
+    tile.appendChild(name);
+    tile.onclick = () => selectTile(f.slot);
+    row.appendChild(tile);
+  }
 
-    const fp = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    fp.setAttribute("class", "fp-mark" + (matchLive && slot === matchSlot ? " fp-mark--match" : ""));
-    fp.setAttribute("viewBox", "0 0 16 16");
-    fp.setAttribute("aria-hidden", "true");
-    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-    use.setAttribute("href", "#fp-mark");
-    fp.appendChild(use);
-    li.appendChild(fp);
+  if (pendingSlot !== null) {
+    const tile = document.createElement("div");
+    tile.className = "finger-tile finger-tile--pending";
+    const glyph = document.createElement("span");
+    glyph.className = "finger-glyph";
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.textContent = "🫆";
+    const name = document.createElement("span");
+    name.className = "finger-name";
+    name.textContent = "Adding…";
+    tile.appendChild(glyph);
+    tile.appendChild(name);
+    row.appendChild(tile);
+  }
 
-    const num = document.createElement("span");
-    num.className = "slot-num";
-    num.textContent = String(slot);
-    li.appendChild(num);
+  const addTile = document.createElement("button");
+  addTile.type = "button";
+  addTile.className = "finger-tile finger-tile--add";
+  const free = lowestFreeSlot(s);
+  addTile.disabled = free === null || pendingSlot !== null || enrolling;
+  const plus = document.createElement("span");
+  plus.className = "finger-glyph finger-glyph--plus";
+  plus.setAttribute("aria-hidden", "true");
+  plus.textContent = "+";
+  const addName = document.createElement("span");
+  addName.className = "finger-name";
+  addName.textContent = "Add a finger";
+  addTile.appendChild(plus);
+  addTile.appendChild(addName);
+  addTile.onclick = startEnroll;
+  row.appendChild(addTile);
 
-    const nameSpan = document.createElement("span");
-    nameSpan.className = "slot-label";
-    nameSpan.textContent = ` · ${label || "(unnamed)"}`;
-    li.appendChild(nameSpan);
+  document.getElementById("finger-limit-hint").hidden = free !== null;
+}
 
-    const ren = document.createElement("button");
-    ren.className = "rename-btn";
-    ren.textContent = "Rename";
-    ren.onclick = async (e) => {
-      e.preventDefault();
-      // Swap label text for input
-      const input = document.createElement("input");
-      input.type = "text";
-      input.className = "rename-input";
-      input.value = label || "";
-      input.maxLength = 64;
+// Below the row: naming (right after a successful enroll), or rename +
+// remove for a tile the user clicked. Never both — naming wins, since it
+// only appears in the brief window right after enrollment succeeds.
+function renderFingerPanel(s) {
+  const panel = document.getElementById("finger-panel");
+  panel.innerHTML = "";
 
-      const save = document.createElement("button");
-      save.className = "save-btn";
-      save.textContent = "Save";
-      const cancel = document.createElement("button");
-      cancel.className = "cancel-btn";
-      cancel.textContent = "Cancel";
+  if (namingSlot !== null) {
+    panel.hidden = false;
+    const label = document.createElement("label");
+    label.textContent = "Name this finger";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "rename-input";
+    input.maxLength = 64;
+    input.placeholder = "right index";
+    label.appendChild(input);
+    const save = document.createElement("button");
+    save.textContent = "Save";
+    save.onclick = () => saveFingerName(namingSlot, input.value, false);
+    panel.appendChild(label);
+    panel.appendChild(save);
+    requestAnimationFrame(() => input.focus());
+  } else if (selectedSlot !== null) {
+    panel.hidden = false;
+    const labels = s.slots || {};
+    const entry = labels[String(selectedSlot)];
+    const label = document.createElement("label");
+    label.textContent = "Rename";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "rename-input";
+    input.maxLength = 64;
+    input.value = entry ? entry.label : "";
+    label.appendChild(input);
+    const save = document.createElement("button");
+    save.textContent = "Save";
+    save.onclick = () => saveFingerName(selectedSlot, input.value, true);
+    const remove = document.createElement("button");
+    remove.className = "remove-btn";
+    remove.textContent = "Remove";
+    remove.onclick = () => removeFinger(selectedSlot);
+    panel.appendChild(label);
+    panel.appendChild(save);
+    panel.appendChild(remove);
+  } else {
+    panel.hidden = true;
+  }
+}
 
-      save.onclick = async () => {
-        try {
-          const response = await fetch("/api/label", {method: "POST",
-            headers: {"Content-Type": "application/json", "X-DT-Token": token},
-            body: JSON.stringify({slot, label: input.value})});
-          if (!response.ok) {
-            document.getElementById("progress").textContent = "That didn't go through — this page has probably gone stale. Close this tab and open the fresh link from the helper (or run .venv/bin/dashtouch enroll).";
-          } else {
-            // Re-poll to pick up the change
-            poll();
-          }
-        } catch {
-          document.getElementById("progress").textContent = "Can't reach the helper — is it still running?";
-        }
-      };
-      cancel.onclick = () => {
-        nameSpan.textContent = ` · ${label || "(unnamed)"}`;
-        li.replaceChild(nameSpan, input);
-        li.replaceChild(ren, save);
-        li.removeChild(cancel);
-      };
+function selectTile(slot) {
+  namingSlot = null;
+  selectedSlot = selectedSlot === slot ? null : slot;
+  if (lastStatus) {
+    renderFingerRow(lastStatus);
+    renderFingerPanel(lastStatus);
+  }
+}
 
-      li.replaceChild(input, nameSpan);
-      li.replaceChild(save, ren);
-      li.appendChild(cancel);
-      input.focus();
-    };
-    li.appendChild(ren);
-
-    const del = document.createElement("button");
-    del.className = "remove-btn";
-    del.textContent = "Remove";
-    del.onclick = async () => {
-      try {
-        const response = await fetch("/api/delete", {method: "POST",
-          headers: {"Content-Type": "application/json", "X-DT-Token": token},
-          body: JSON.stringify({slot})});
-        if (!response.ok) {
-          document.getElementById("progress").textContent = "That didn't go through — this page has probably gone stale. Close this tab and open the fresh link from the helper (or run .venv/bin/dashtouch enroll).";
-        }
-      } catch {
-        document.getElementById("progress").textContent = "Can't reach the helper — is it still running?";
+async function startEnroll() {
+  if (!lastStatus) return;
+  const slot = lowestFreeSlot(lastStatus);
+  if (slot === null) return;
+  document.getElementById("progress").textContent = "Starting…";
+  try {
+    const response = await fetch("/api/enroll", {method: "POST",
+      headers: {"Content-Type": "application/json", "X-DT-Token": token},
+      body: JSON.stringify({slot, label: ""})});
+    if (response.ok) {
+      enrolling = true;
+      pendingSlot = slot;
+      selectedSlot = null;
+      namingSlot = null;
+      if (activeTab === "debug" && !logInterval && token) {
+        fetchLog();
+        logInterval = setInterval(fetchLog, 1000);
       }
-    };
-    li.appendChild(del);
-    ul.appendChild(li);
+      renderFingerRow(lastStatus);
+      renderFingerPanel(lastStatus);
+    } else {
+      document.getElementById("progress").textContent = "That didn't go through — this page has probably gone stale. Close this tab and open the fresh link from the helper (or run .venv/bin/dashtouch enroll).";
+    }
+  } catch {
+    document.getElementById("progress").textContent = "Can't reach the helper — is it still running?";
+  }
+}
+
+async function saveFingerName(slot, value, isRename) {
+  try {
+    const response = await fetch("/api/label", {method: "POST",
+      headers: {"Content-Type": "application/json", "X-DT-Token": token},
+      body: JSON.stringify({slot, label: value})});
+    if (!response.ok) {
+      document.getElementById("progress").textContent = "That didn't go through — this page has probably gone stale. Close this tab and open the fresh link from the helper (or run .venv/bin/dashtouch enroll).";
+      return;
+    }
+    if (isRename) selectedSlot = null; else namingSlot = null;
+    refresh();
+  } catch {
+    document.getElementById("progress").textContent = "Can't reach the helper — is it still running?";
+  }
+}
+
+async function removeFinger(slot) {
+  try {
+    const response = await fetch("/api/delete", {method: "POST",
+      headers: {"Content-Type": "application/json", "X-DT-Token": token},
+      body: JSON.stringify({slot})});
+    if (!response.ok) {
+      document.getElementById("progress").textContent = "That didn't go through — this page has probably gone stale. Close this tab and open the fresh link from the helper (or run .venv/bin/dashtouch enroll).";
+      return;
+    }
+    selectedSlot = null;
+    refresh();
+  } catch {
+    document.getElementById("progress").textContent = "Can't reach the helper — is it still running?";
   }
 }
 
@@ -372,6 +447,7 @@ async function refresh() {
     return;
   }
   const s = await r.json();
+  lastStatus = s;
 
   document.getElementById("conn").textContent = s.connected
     ? `Connected — firmware ${s.fw}`
@@ -415,37 +491,25 @@ async function refresh() {
       ? "That didn't take — try again with the pad flat on the ring."
       : s.enroll_stage);
     document.getElementById("progress").textContent = nice;
-    if (s.enroll_stage.startsWith("ENROLL_OK") || s.enroll_stage.startsWith("ENROLL_FAIL")) {
+    if (s.enroll_stage.startsWith("ENROLL_OK")) {
+      // A successful enrollment always moves straight into naming — the
+      // fingerprint is stored, but no name exists yet. If some other
+      // client (serial, another tab) drove this enrollment, pendingSlot is
+      // null here and there's nothing of ours to name.
+      if (pendingSlot !== null) namingSlot = pendingSlot;
+      pendingSlot = null;
+      enrolling = false;
+    } else if (s.enroll_stage.startsWith("ENROLL_FAIL")) {
+      // Failure leaves no tile and no name — pendingSlot simply clears,
+      // dropping the pending tile from the row on the next render.
+      pendingSlot = null;
       enrolling = false;
     }
   }
 
-  updateSlotSelect(s);
-  updateSlotList(s);
+  renderFingerRow(s);
+  renderFingerPanel(s);
 }
-
-document.getElementById("enroll").onclick = async () => {
-  const slot = Number(document.getElementById("slot").value);
-  const label = document.getElementById("label").value;
-  document.getElementById("progress").textContent = "Starting…";
-  try {
-    const response = await fetch("/api/enroll", {method: "POST",
-      headers: {"Content-Type": "application/json", "X-DT-Token": token},
-      body: JSON.stringify({slot, label})});
-    if (response.ok) {
-      enrolling = true;
-      // Restart log polling if a mutation succeeded
-      if (activeTab === "debug" && !logInterval && token) {
-        fetchLog();
-        logInterval = setInterval(fetchLog, 1000);
-      }
-    } else {
-      document.getElementById("progress").textContent = "That didn't go through — this page has probably gone stale. Close this tab and open the fresh link from the helper (or run .venv/bin/dashtouch enroll).";
-    }
-  } catch {
-    document.getElementById("progress").textContent = "Can't reach the helper — is it still running?";
-  }
-};
 
 // -- debug view: live device/helper activity feed --------------------------
 const DIR_PREFIX = {device: "device → ", host: "→ device ", web: "web  ", helper: "helper  "};

@@ -220,9 +220,23 @@ def test_enroll_ok_writes_pending_label(tmp_path, monkeypatch):
     d = make_daemon()
     d.pending_label = {"slot": 3, "label": "right index"}
     d.handle_line("ENROLL_OK 3")
-    # After ENROLL_OK, label should be written
+    # After ENROLL_OK, label should be written in object form, with a
+    # freshly-set `added` timestamp (this is a brand new entry).
     labels = json.loads((tmp_path / "labels.json").read_text())
-    assert labels.get("3") == "right index"
+    assert labels["3"]["label"] == "right index"
+    assert labels["3"]["added"] > 0
+    assert d.pending_label is None
+
+
+def test_enroll_ok_with_blank_pending_label_does_not_write(tmp_path, monkeypatch):
+    """ENROLL_OK with a blank pending label (naming happens after enrollment
+    now) leaves the slot unlabeled instead of writing an empty name."""
+    from dashtouch_helper import webui
+    monkeypatch.setattr(webui, "LABELS_PATH", tmp_path / "labels.json")
+    d = make_daemon()
+    d.pending_label = {"slot": 3, "label": ""}
+    d.handle_line("ENROLL_OK 3")
+    assert not (tmp_path / "labels.json").exists()
     assert d.pending_label is None
 
 

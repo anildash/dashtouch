@@ -7,6 +7,7 @@ import os
 import pathlib
 import secrets
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 WEB_ROOT = pathlib.Path(__file__).parents[1] / "web"
@@ -17,11 +18,24 @@ TOKEN_PATH = pathlib.Path.home() / ".dashtouch" / "token"
 _labels_lock = threading.Lock()
 
 
+def _normalize_entry(value) -> dict:
+    """A bare string (the old labels.json format) becomes an object with
+    added=0.0, so legacy entries sort to the front, oldest-first."""
+    if isinstance(value, dict):
+        return {"label": str(value.get("label", "")), "added": float(value.get("added", 0.0) or 0.0)}
+    return {"label": str(value), "added": 0.0}
+
+
 def _load_labels() -> dict:
+    """Tolerant of the old slot->string format; always returns the object
+    form {"label": str, "added": float} so callers never branch on shape."""
     try:
-        return json.loads(LABELS_PATH.read_text())
+        raw = json.loads(LABELS_PATH.read_text())
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {k: _normalize_entry(v) for k, v in raw.items()}
 
 
 def _save_labels(labels: dict) -> None:
@@ -30,10 +44,14 @@ def _save_labels(labels: dict) -> None:
 
 
 def save_label(slot: int, label: str) -> None:
-    """Save a label for a slot (called by daemon on ENROLL_OK, and by /api/label endpoint)."""
+    """Save a label for a slot (called by daemon on ENROLL_OK, and by
+    /api/label endpoint). Preserves the entry's original `added` timestamp
+    on rename; sets it fresh only when the entry is first created."""
     with _labels_lock:
         labels = _load_labels()
-        labels[str(slot)] = label
+        existing = labels.get(str(slot))
+        added = existing["added"] if existing else time.time()
+        labels[str(slot)] = {"label": label, "added": added}
         _save_labels(labels)
 
 

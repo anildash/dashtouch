@@ -231,7 +231,6 @@ a:hover { opacity: .85; }
 .health-summary .dot { flex: none; }
 
 /* -- forms ------------------------------------------------------------ */
-#enroll-form { display: flex; flex-wrap: wrap; gap: .6rem; align-items: flex-end; }
 label { display: flex; flex-direction: column; gap: .3rem; font-size: .8rem; color: var(--muted); }
 input, select {
   font: inherit;
@@ -241,7 +240,6 @@ input, select {
   border-radius: 8px;
   padding: .45rem .6rem;
 }
-select#slot { font-family: var(--font-mono); }
 button {
   font: inherit;
   font-weight: 600;
@@ -264,16 +262,6 @@ button:hover { filter: brightness(1.08); }
 }
 .remove-btn:hover { color: var(--text); filter: none; }
 
-.rename-btn {
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  font-weight: 500;
-  padding: .3rem .7rem;
-  font-size: .85rem;
-}
-.rename-btn:hover { color: var(--text); filter: none; }
-
 .rename-input {
   font: inherit;
   background: transparent;
@@ -287,40 +275,76 @@ button:hover { filter: brightness(1.08); }
 }
 .rename-input:focus { outline: none; border-color: var(--aura-purple); box-shadow: 0 0 0 2px rgba(160, 107, 255, 0.2); }
 
-.save-btn, .cancel-btn {
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  font-weight: 500;
-  padding: .3rem .7rem;
-  font-size: .85rem;
-}
-.save-btn:hover, .cancel-btn:hover { color: var(--text); filter: none; }
-
 #progress { font-weight: 600; min-height: 1.2em; margin-top: .75rem; }
 
-/* -- enrolled slot list -------------------------------------------------- */
-#slots { list-style: none; margin: .5rem 0 0; padding: 0; }
-#slots li {
+/* -- finger tile row: Touch ID-style tiles, one per enrolled finger,
+   plus an Add tile at the end. No slot numbers anywhere. ---------------- */
+.finger-row {
   display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px;
+  margin: .25rem 0 0;
+  padding: 0;
+}
+.finger-tile {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: .5rem;
-  padding: .55rem 0;
+  gap: .4rem;
+  width: 76px;
+  padding: .7rem .4rem .55rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+  text-align: center;
+}
+.finger-tile:hover { background: var(--ink); }
+.finger-tile--selected {
+  background: var(--ink);
+  border-color: var(--aura-purple);
+}
+.finger-tile--match {
+  background: rgba(var(--aura-green-rgb), .12);
+  border-color: var(--aura-green);
+}
+.finger-glyph {
+  font-size: 2rem;
+  line-height: 1;
+}
+.finger-glyph--plus {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.finger-name {
+  font-size: .78rem;
+  color: var(--text);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.finger-tile--pending { cursor: default; }
+.finger-tile--pending .finger-glyph { animation: breathe 2.4s ease-in-out infinite; }
+.finger-tile--pending .finger-name { color: var(--muted); }
+.finger-tile--add:disabled { opacity: .4; cursor: not-allowed; }
+.finger-tile--add:disabled:hover { background: transparent; }
+.finger-limit-hint { margin: .6rem 0 0; }
+
+/* -- finger panel: naming a fresh enrollment, or rename + remove ------- */
+.finger-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: .6rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
   border-top: 1px solid var(--line);
 }
-.slot-num { font-family: var(--font-mono); color: var(--text); }
-.slot-label { flex: 1; }
-#slots li .rename-btn { margin-left: auto; }
-#slots li .remove-btn { margin-left: .5rem; }
-
-.fp-mark {
-  width: 16px;
-  height: 16px;
-  flex: none;
-  color: var(--muted);
-  transition: color .3s ease;
-}
-.fp-mark--match { color: var(--aura-green); }
 
 /* -- tool strip: Help / Under the hood, revealed on demand ------------ */
 .tool-strip { margin-top: 4px; }
