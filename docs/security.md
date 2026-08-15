@@ -1,6 +1,6 @@
 # Is this thing safe?
 
-Reasonable question. Here's the deal, in plain language first.
+It's safe enough for casual users. It is _not_ best practice to have a device that types in your password for you, though. So you need to judge what feels right.
 
 **Dashboard Touch types your real password.** When your finger matches,
 the gadget acts like a tiny USB keyboard and types the same thing you
