@@ -67,6 +67,8 @@ The wires connect to the QT Py like this:
 | Blue | touch wake | `A3` |
 | **White** | **touch power** | **`3V` (the same pin as the red wire)** |
 
+Make sure you wire up the white wire to the power lead just like the red wire. It's easy to get excited and leave it off, because the sensor will power up and light up without it, but nothing will work right if you don't, so save yourself some trouble and be sure to get all 6 wires going.
+
 ## Set it up
 
 You'll need the code from this github repo to set everything up. There's a script that should help, so you can just do:
