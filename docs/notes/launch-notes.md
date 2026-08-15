@@ -14,7 +14,7 @@ visibly, in the user's own voice.
 
 ### What you actually need (~$25)
 
-| Part | What Anil used | Notes |
+| Part | What I used | Notes |
 | --- | --- | --- |
 | Fingerprint sensor | [R503-compatible, ~$10–20](https://amzn.to/4wnVuO9) | The exact unit in this build. Unbranded; self-reports 200-template capacity. |
 | Microcontroller | [Adafruit QT Py ESP32-S3, $12.50](https://www.adafruit.com/product/5426) | Native USB, tiny, well-documented, active community. |
@@ -61,7 +61,7 @@ emotional hook — price is the rational backup.
 4. **What it looks like to use** — the LED language as a feature: purple
    ready, white reading, green match, red no, yellow "can't reach your
    Mac," cyan lift-your-finger. Six colors, no manual required.
-5. **Mount it anywhere** — a gallery slot. Anil's under-desk build, plus
+5. **Mount it anywhere** — a gallery slot. My under-desk build, plus
    sketched patterns (desk grommet, drawer front, enclosure wall).
 6. **Setup in three commands** — clone, `./setup`, enroll in the browser.
    Screenshot of the web page's Checkup card: every row green.
@@ -165,7 +165,7 @@ the receipts.
 
 ---
 
-## 5. Open questions for Anil
+## 5. Open questions to settle
 
 - Does the landing page live at its own domain, or as a section of
   anildash.com?

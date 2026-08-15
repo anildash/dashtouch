@@ -42,8 +42,8 @@ desk. (For a lot of home offices, it is.)
 
 | Part | Cost | Where |
 | --- | --- | --- |
-| Adafruit QT Py ESP32-S3 (the tiny computer, what Anil used) | ~$12.50 | [adafruit.com](https://www.adafruit.com/product/5426) |
-| R503 fingerprint sensor (the round thing, what Anil used) | ~$10–20 | [Amazon](https://amzn.to/4wnVuO9) |
+| Adafruit QT Py ESP32-S3 (the tiny computer, what I used) | ~$12.50 | [adafruit.com](https://www.adafruit.com/product/5426) |
+| R503 fingerprint sensor (the round thing, what I used) | ~$10–20 | [Amazon](https://amzn.to/4wnVuO9) |
 | USB-C cable, data-capable (not a charge-only one) | you have one | [Amazon](https://amzn.to/4zjg9p9) |
 
 Presumably a [cheaper board](https://amzn.to/4gjkss2) could work here too —
@@ -59,6 +59,13 @@ The sensor is a round module about an inch across with a threaded barrel —
 made to poke through a hole in a panel and screw tight. Any panel you
 like. That's the fun part. Don't want to build an enclosure? [This one](https://amzn.to/4wwqw6m)
 skips the woodworking.
+
+**Could it be wireless?** In theory, yes — the board has WiFi and
+Bluetooth LE, and pads on the underside for a battery. It'd have to type
+over Bluetooth rather than USB, since typing your password at the login
+screen is the whole point and that only works if your Mac sees a real
+keyboard. I haven't explored it, so consider it an open idea rather than
+a supported option.
 
 ## Wire it (six wires, all six matter)
 

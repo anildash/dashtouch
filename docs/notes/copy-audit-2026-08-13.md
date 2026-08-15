@@ -10,7 +10,7 @@ troubleshooting.md → security.md.
 
 **README.md**
 - Parts table now uses the brief's real links: fingerprint sensor
-  (Amazon, what Anil used), Adafruit R503 as the alternative (noted:
+  (Amazon, what I used), Adafruit R503 as the alternative (noted:
   often out of stock, costs nearly twice as much, same part), the
   data-capable USB-C cable, and the cheaper-board possibility framed
   honestly as untested ("presumably... try it and report back").
