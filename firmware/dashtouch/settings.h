@@ -21,7 +21,8 @@ bool settingsPressEnter();
 // true = swap them — transmit on DT_FP_RX_PIN, receive on DT_FP_TX_PIN.
 // Only the sensor UART is affected; the USB CDC link to the Mac never
 // changes, so a wrong setting here is always recoverable over USB. See
-// docs/history/2026-08-12-qtpy-uart-fault.md for why this exists.
+// Some boards can't drive UART transmit on the default pin; this lets
+// the sensor's TX/RX pair be swapped without reflashing.
 bool settingsFpSwap();
 
 // Setters validate and persist; return false (and leave the stored value

@@ -14,7 +14,7 @@ The firmware can't talk to the sensor. In order:
 2. **Yellow and brown swapped?** Yellow (sensor's voice) goes to `RX`,
    brown (sensor's ears) goes to `TX`. Crossed pairs are silent.
 3. **Loose leads.** If you're using clip leads or a breadboard, tug-test
-   each one. A clip that looks attached but isn't cost this project a
+   each one. A clip that looks attached but isn't can cost you a
    full evening.
 4. **Rare, but real: the board itself.** One known QT Py unit cannot
    transmit on its `TX` pad at all. [firmware/diagnostics/](../firmware/diagnostics/README.md)

@@ -81,9 +81,9 @@ The sensor's cable has six colored leads. They land on the QT Py like so:
 | **White** | **touch power** | **`3V` (yes, a second wire on the same pin)** |
 
 **About that white wire:** without it, the sensor can hear but can't
-speak — everything will look broken in a way that cost this project two
-sensors and a lot of dead ends before we worked it out, so you don't have
-to. Both red *and* white go to `3V`.
+speak — it powers up, takes commands, even lights its ring, but never
+answers. It looks exactly like a dead sensor. Both red *and* white go to
+`3V`.
 
 ## Set it up
 
@@ -149,12 +149,15 @@ the helper's page, stored right on the gadget.
 ## Something not working?
 
 Run `.venv/bin/dashtouch doctor` for a quick check-up, or read
-[docs/troubleshooting.md](docs/troubleshooting.md) — every dead end in
-there is one this project personally drove into so you don't have to.
+[docs/troubleshooting.md](docs/troubleshooting.md), which walks through
+the usual suspects symptom by symptom.
 
 ## Credits
 
 Dashboard Touch is an extensive rework of
 [tinyTouch](https://github.com/ZimengXiong/tinyTouch) by Zimeng Xiong,
-which proved the whole idea. The debugging war stories live in
-[docs/history/](docs/history/). MIT licensed, like the original.
+which proved the whole idea. MIT licensed, like the original.
+
+Improvements welcome — the wiring is six leads and the protocol is
+documented in [docs/protocol.md](docs/protocol.md), so there's plenty of
+room to make this better.

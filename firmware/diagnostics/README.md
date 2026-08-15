@@ -1,8 +1,8 @@
 # Sensor and board bring-up diagnostics
 
-Five throwaway-but-useful sketches plus a host-side reader. Together they
-answer "is it the wiring, the baud rate, the sensor, or the board?" in a few
-minutes instead of a full session.
+A handful of small sketches plus a host-side reader. Together they answer
+"is it the wiring, the baud rate, the sensor, or the board?" in a few
+minutes instead of an evening.
 
 All target the QT Py ESP32-S3. Pin labels map to GPIOs as follows (confirmed
 against the Arduino core's variant file, not assumed):
@@ -13,10 +13,10 @@ against the Arduino core's variant file, not assumed):
 | `RX` | 16 | our **transmit** (sensor brown/RXD) |
 | `A3` | 8 | WAKEUP (sensor blue) — unused, see below |
 
-**The TX/RX roles are deliberately swapped relative to the silkscreen** —
-GPIO 5 cannot carry UART transmit on this board. Sketches that hardcode a
-single orientation must use `rx=5, tx=16`; `fp_boot_listen` and `fp_led` both
-shipped with the wrong (silkscreen) orientation and silently tested nothing.
+**The TX/RX roles above are swapped relative to the silkscreen**, because
+the board these were written against can't carry UART transmit on GPIO 5.
+If yours can, use the silkscreen orientation. Either way, a sketch pointed
+at the wrong pair will look like a dead sensor, so check this first.
 
 `A3`/WAKEUP is wired but unused: the production firmware sets
 `USE_INT_PIN = false` and polls `GenImg` instead, because on this module the
@@ -53,11 +53,11 @@ invisible to a reader that exits on the first read error.
 
 ## Wire ALL SIX sensor wires before diagnosing anything
 
-**This is the single most expensive lesson in this project.** Sensor pin 6
-(`3.3VT`, white) must be connected to `3V`. With it unwired the module powers
-up, receives commands, and *executes* them — the aura ring visibly obeys —
-but it **cannot reply to anything**. That looks exactly like a dead sensor,
-and it cost this project two "defective" verdicts and several sessions.
+**Check this before anything else.** Sensor pin 6 (`3.3VT`, white) must be
+connected to `3V`. With it unwired the module powers up, receives commands,
+and *executes* them — the aura ring visibly obeys — but it **cannot reply to
+anything**. That looks exactly like a dead sensor, and it is the most common
+reason a healthy one gets written off.
 
 Both power wires (pins 1 and 6) land on the single `3V` pad. If you are
 bringing wires up one at a time to isolate a fault, connect **both power
@@ -66,9 +66,9 @@ later step.
 
 ## Triage order
 
-**Test the board before you blame the sensor.** Two different fingerprint
-sensors were diagnosed as defective through a board-side transmit fault that
-nobody had checked, because every test assumed the MCU's UART worked.
+**Test the board before you blame the sensor.** A board-side transmit fault
+looks identical to a dead sensor, and every test that assumes the MCU's UART
+works will happily confirm the wrong conclusion.
 
 0. **Check all six wires**, especially `3.3VT` (see above).
 1. **`fp_loopback`** — does this board's UART work at all? No sensor involved.
@@ -119,10 +119,8 @@ a pure handshake.
 > **`trailing_bytes` does NOT measure sensor silence — do not read it that
 > way.** `verifyPassword()` consumes the sensor's response internally, so
 > `trailing_bytes` counts only what arrived *after* the library was done.
-> Zero is the normal result whether the sensor answered or not. This metric
-> is what condemned the ZW111 ("all 14 combinations returned
-> `trailing_bytes=0`, proving the sensor never transmitted") — it proved no
-> such thing.
+> Zero is the normal result whether the sensor answered or not, so it is
+> not evidence of anything. Don't use it to decide a sensor is dead.
 >
 > A working R503 has been observed returning `confirm=0x00` to a raw
 > `VerifyPassword` via `fp_probe` while `fp_sweep` simultaneously reported
@@ -146,9 +144,9 @@ Sends raw `0xEF01` packets with no library involved, and dumps every byte
 that comes back. Three commands per cycle: `VerifyPassword` (0x13),
 `ReadSysPara` (0x0F), and a known-good `AuraLedConfig` (0x35) as a control.
 
-This exists because `fp_sweep` reported total failure on a sensor that was
-in fact answering every command correctly. Removing the Adafruit library from
-the picture settled it in one run.
+It exists because a library sitting between you and the sensor can report
+failure on a sensor that's answering perfectly well. This removes that
+variable.
 
 `ReadSysPara`'s reply is also the only model ID an unbranded module offers:
 
@@ -212,10 +210,9 @@ response to anything you sent. Neither state tells you much on its own.
 | Echoes back | No reaction | No reply | No power, no comms, or a fully dead part |
 | **Floods zeros** | any | any | **Board-side transmit fault — every sensor verdict below this line is unsafe** |
 
-The "receives but never replies" row was originally documented here as "dead
-TX driver or broken TX wire." **That was wrong**, and it sent this project
-down a long dead end. On the R503 that prompted this correction, the cause
-was simply that `3.3VT` was not connected.
+"Receives but never replies" looks like a dead TX driver or a broken TX
+wire. Far more often it just means `3.3VT` isn't connected — check that
+first, every time.
 
 Measuring the idle voltage on the sensor's TX line is still worth doing, but
 **a low reading does not condemn the part**. A healthy idle UART line sits at

@@ -18,8 +18,8 @@
 // instrument here.
 #include <Arduino.h>
 
-static const int FP_RX_PIN = 5;   // pad labeled "TX" -- this build's board, see
-static const int FP_TX_PIN = 16;  // docs/history/2026-08-12-qtpy-uart-fault.md
+static const int FP_RX_PIN = 5;   // pad labeled "TX" -- swapped, as this
+static const int FP_TX_PIN = 16;  // board can't transmit on the default pin
 
 HardwareSerial Finger(1);
 
