@@ -19,57 +19,44 @@ sensor device, and your password never leaves your Mac.
 is ready, a row of enrolled fingers, and a setup checklist with everything
 green.](docs/images/web-ui.png)
 
-The page above is where you add fingers and check that everything's
-working. It runs on your own Mac — nothing leaves it.
+The page above is where you add fingerprints and check that everything's
+working. It runs entirely on your own Mac.
 
 ![A round fingerprint sensor set into a small wooden block, its ring lit
 purple, wired to a thumb-sized microcontroller on a workbench.](docs/images/device.jpg)
 
-*A work-in-progress build — the sensor gets mounted into the desk itself,
-but this is the whole gadget: one sensor, one microcontroller, six wires.*
+*A look at a Dashboard Touch build in progress, with the fingerprint sensor mounted in a small wooden block designed to mount to a desk, the connection wires soldered to the QT Py microcontroller, and a standard USB plug providing power and sending the signal to the computer.*
 
-## The honest part, first
+## How it works, and why it's safe
 
-Dashboard Touch works by **typing your real password** the moment it
-recognizes your finger. That's why it works everywhere — and it's also a
-real security tradeoff you should understand before building one. The
-short version: anyone with physical access to your desk and your gadget
-could get up to mischief. Read [docs/security.md](docs/security.md) —
-it's written for humans — and decide if that tradeoff is fine for your
-desk. (For a lot of home offices, it is.)
+Dashboard Touch works by **typing your real password** as soon as your fingerprint has been verified by the sensor. Behind the scenes, the system basically looks like a keyboard to your Mac, which just happens to type in the correct password _only_ if your securely-recorded fingerprint is pressed to the device.
+This design is why it works everywhere, but it also entails a
+real security tradeoff that you should understand before building one. The
+short version: anyone with physical access to your desk and your Dashboard Touch hardware, if they have enough expertise, could cause you real problems. You can read over [docs/security.md](docs/security.md) and decide if that tradeoff is fine for where your Mac is located. (For most normal households and home offices, it will probably be something most people are comfortable with.)
 
-## What you need
+## What you need to get started
 
-| Part | Cost | Where |
-| --- | --- | --- |
-| Adafruit QT Py ESP32-S3 (the tiny computer, what I used) | ~$12.50 | [adafruit.com](https://www.adafruit.com/product/5426) |
-| R503 fingerprint sensor (the round thing, what I used) | ~$10–20 | [Amazon](https://amzn.to/4wnVuO9) |
-| USB-C cable, data-capable (not a charge-only one) | you have one | [Amazon](https://amzn.to/4zjg9p9) |
+The build really only requires a few simple parts. These are the exact devices that I used to build mine, but there are _lots_ of similar variants and you could probably get them to work with a little bit of effort, too.
 
-Presumably a [cheaper board](https://amzn.to/4gjkss2) could work here too —
-untested in this build, so it's a "try it and report back" rather than a
-recommendation. If the Amazon sensor is out of stock, [Adafruit sells the
-same part](https://www.adafruit.com/product/4651) — it's a fine swap, just
-usually pricier and often backordered itself.
+| Part | Product| Cost | Where |
+| --- | ---| --- | --- |
+| Microcontroller | Adafruit QT Py ESP32-S3 | ~$12.50 | [adafruit.com](https://www.adafruit.com/product/5426) |
+| Fingerprint sensor | Simlug R503 clone  | ~$10–20 | [Amazon](https://amzn.to/4wnVuO9) |
+| USB-C cable | Must be a _data_ cable, not just charging | you have one | [Amazon](https://amzn.to/4zjg9p9) |
 
-Some links on this page are affiliate links — they cost you nothing extra
-and help pay for the next round of parts.
+Presumably a [cheaper board](https://amzn.to/4gjkss2) could work here too. I haven't tested any of those other variants, but if you do and it works, please do share your notes back. If the Amazon sensor is out of stock, [Adafruit sells the
+same part](https://www.adafruit.com/product/4651); it was just out of stock (and a lot more expensive) when I was doing my build. (Some of these links are affiliate links. If I make any money from that, I'll use it to help folks who want to build some of this stuff but don't have the tools/etc. that they need.)
 
-The sensor is a round module about an inch across with a threaded barrel —
-made to poke through a hole in a panel and screw tight. Any panel you
-like. That's the fun part. Don't want to build an enclosure? [This one](https://amzn.to/4wwqw6m)
-skips the woodworking.
+The fingerprint sensor is a round cylinder about an inch across with a threaded barrel. I built a very simple wooden panel to mount mine on (you just poke it through the hole and screw the bolt on the back), but if you don't want to build an enclosure, I think [this one](https://amzn.to/4wwqw6m)
+would probably fit with no work required.
 
-**Could it be wireless?** In theory, yes — the board has WiFi and
-Bluetooth LE, and pads on the underside for a battery. It'd have to type
-over Bluetooth rather than USB, since typing your password at the login
-screen is the whole point and that only works if your Mac sees a real
-keyboard. I haven't explored it, so consider it an open idea rather than
-a supported option.
+## How to hook it up (what you need to solder)
 
-## Wire it (six wires, all six matter)
+You'll need to solder a few small connections to put together the QT Py board and the sensor. It's not hard if you have experience soldering, but it can be a little bit fiddly. 
 
-The sensor's cable has six colored leads. They land on the QT Py like so:
+The fingerprint sensor's cable has six colored leads. By default, they're attached to a little connector plug (it's a JST-SH connector with a 1mm pitch, if you are a nerd) so you will need to either pull the connector pins out of the plug or cut the wires so that you can solder them to the board.
+
+The wires connect to the QT Py like this:
 
 | Wire | Meaning | Goes to |
 | --- | --- | --- |
@@ -78,14 +65,11 @@ The sensor's cable has six colored leads. They land on the QT Py like so:
 | Yellow | sensor talks | `RX` |
 | Brown | sensor listens | `TX` |
 | Blue | touch wake | `A3` |
-| **White** | **touch power** | **`3V` (yes, a second wire on the same pin)** |
-
-**About that white wire:** without it, the sensor can hear but can't
-speak — it powers up, takes commands, even lights its ring, but never
-answers. It looks exactly like a dead sensor. Both red *and* white go to
-`3V`.
+| **White** | **touch power** | **`3V` (the same pin as the red wire)** |
 
 ## Set it up
+
+You'll need the code from this github repo to set everything up. There's a script that should help, so you can just do:
 
 ```sh
 git clone https://github.com/anildash/dashtouch
@@ -93,20 +77,30 @@ cd dashtouch
 ./setup
 ```
 
-The script walks you through everything: it makes a pairing key, tucks
-your password into the Mac's Keychain (never anywhere else), and flashes
-the firmware onto the board. Then:
+The script walks you through everything: it makes a pairing key, stores
+your password in the macOS Keychain (this is the same secure way all your other apps do it), and flashes
+the firmware onto the QT Py board.
+
+Once all of that is configured, you can use the dashtouch command-line tool to do all of your key tasks:
 
 ```sh
 .venv/bin/dashtouch run       # start the helper
 .venv/bin/dashtouch enroll    # opens your browser — add a finger
 .venv/bin/dashtouch           # prints the link to that page, if you'd
                               # rather open it yourself
+.venv/bin/dashtouch doctor  # diagnose the current system setup
 .venv/bin/dashtouch password  # change the password it types (no reflash)
 .venv/bin/dashtouch pairing   # rotate the pairing key (needs a reflash)
+.venv/bin/dashtouch install-agent   # configure the helper to run in the background automatically
 ```
 
-The helper's page lives at port 3274 — DASH on a phone keypad, because of course it is.
+### Dashboard Touch helper
+
+The "helper" is a little app that stays running in the background in order to enable the Dashboard Touch system to do its tasks, but it also provides a convenient user interface for you to configure or customize your setup right from your web browser. The helper's page lives at IP address 127.0.0.1, and the port number is 3274. (That's DASH on a phone keypad.)
+
+### Manually updating firmware
+
+The `dashtouch` utility flashes the firmware to your board for you, but if you want to do that manually yourself, you can do that with the Arduino CLI tools.
 
 <details><summary>Flashing by hand (if setup couldn't see your board)</summary>
 
@@ -116,17 +110,13 @@ arduino-cli upload --fqbn esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cd
 ```
 </details>
 
-Follow the ring: **breathing white** means place your finger, **cyan**
-means lift, green flashes mean you're in. From then on, purple means
-ready — touch the ring, watch your password appear.
+## Once you're set up
 
-Want it running all the time without a terminal open?
+After Dashboard Touch is running, everything you can do is basically visible in the helper tool's web page, and guided by the ring light on the fingerprint sensor. 
 
-```sh
-.venv/bin/dashtouch install-agent
-```
+By default, the ring will be solid purple to indicate that the system is ready (this is configurable, and you can turn the light off). Other colors and blinking statuses make it clear when you can add a new fingerprint, whether an existing fingerprint has been detected, or if there is any kind of error.
 
-## The ring, decoded
+### Sensor ring colors
 
 | Color | Meaning |
 | --- | --- |
@@ -138,13 +128,14 @@ Want it running all the time without a terminal open?
 | Cyan | Lift your finger (enrolling) |
 | Never turns purple | The sensor isn't talking — recheck all six wires |
 
-Ring not matching this table, or stuck on one color? [docs/troubleshooting.md](docs/troubleshooting.md)
-walks through it symptom by symptom.
+If you see some unexpected color, or get stuck, [docs/troubleshooting.md](docs/troubleshooting.md)
+walks through most common problems.
 
-Don't want a lit ring on your desk all night, or want Return pressed
-yourself instead of automatically? Both the resting ring (including
-turning it off entirely) and pressing Return after typing are settings on
-the helper's page, stored right on the gadget.
+### Settings
+
+I tried to make there be as few settings as possible so there isn't too much to configure after you get it working, but there is a simple one-click way to change which color the ring shows when it's at rest. (You have the option to turn it off, or to make the light "breathe".) 
+
+And the other setting is whether or not the system hits "return" automatically after typing in your password. You can switch that off if you want to verify that you're ready to authenticate each time, or if you have any qualms about the system submitting your password on its own when you register a fingerprint.
 
 ## Something not working?
 
@@ -152,12 +143,20 @@ Run `.venv/bin/dashtouch doctor` for a quick check-up, or read
 [docs/troubleshooting.md](docs/troubleshooting.md), which walks through
 the usual suspects symptom by symptom.
 
-## Credits
+## Future directions
 
-Dashboard Touch is an extensive rework of
+**Could it be wireless?** In theory, yes — the board has WiFi and
+Bluetooth LE, and pads on the underside for a battery. It'd have to type
+over Bluetooth rather than USB, since typing your password at the login
+screen is the whole point and that only works if your Mac sees a real
+keyboard. I haven't explored it, so consider it an open idea rather than
+a supported option.
+
+
+## Credits and contributions
+
+Dashboard Touch is an extensive refactoring of
 [tinyTouch](https://github.com/ZimengXiong/tinyTouch) by Zimeng Xiong,
-which proved the whole idea. MIT licensed, like the original.
+which defined this entire approach. It shares the same MIT license as the project which inspired it.
 
-Improvements welcome — the wiring is six leads and the protocol is
-documented in [docs/protocol.md](docs/protocol.md), so there's plenty of
-room to make this better.
+The protocol is documented in [docs/protocol.md](docs/protocol.md), and this is my first attempt at sharing any of the code I've made for a hardware project, so improvements, feedback, comments and pull requests are very welcome!
