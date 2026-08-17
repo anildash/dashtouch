@@ -291,8 +291,8 @@ def cmd_run(args) -> int:
 
 
 def _webui_url() -> str | None:
-    """The full tokened link to the helper's page, or None if the helper
-    has never run (that file is written on startup)."""
+    """The full link to the helper's page (no session token in the URL),
+    or None if the helper has never run (that file is written on startup)."""
     try:
         url = webui.URL_PATH.read_text().strip()
     except (OSError, UnicodeDecodeError):
@@ -320,8 +320,8 @@ def cmd_where(args) -> int:
         return 1
     print(url)
     if sys.stderr.isatty():
-        print("\nThat link includes your session key — treat it like a password.\n"
-              "`dashtouch enroll` opens it for you.", file=sys.stderr)
+        print("\nThis link opens the helper's page on localhost; the session token is handled locally and is not included in the URL.\n"
+              "Use `dashtouch enroll` to open it for you.", file=sys.stderr)
     return 0
 
 

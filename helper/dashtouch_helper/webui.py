@@ -149,6 +149,14 @@ def _make_handler(daemon, token):
         def _json(self, status, obj):
             body = json.dumps(obj).encode()
             self.send_response(status)
+            # Security headers: CSP limits where resources can be loaded from,
+            # X-Frame-Options prevents embedding, Referrer-Policy avoids leaking
+            # the local URL in Referer headers, and nosniff stops MIME sniffing.
+            self.send_header("Content-Security-Policy",
+                             "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none';")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -161,6 +169,12 @@ def _make_handler(daemon, token):
                 self.send_error(404)
                 return
             self.send_response(200)
+            # Same security headers on static responses.
+            self.send_header("Content-Security-Policy",
+                             "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none';")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -187,6 +201,10 @@ def _make_handler(daemon, token):
                 with daemon._events_lock:
                     events = list(daemon.events)
                 self._json(200, {"events": events})
+            elif path == "/api/token":
+                # Same-origin page can fetch the session token; do NOT set CORS
+                # headers so remote origins cannot read this response.
+                self._json(200, {"token": token})
             else:
                 self.send_error(404)
 
@@ -385,7 +403,10 @@ def start(daemon, port: int = 3274) -> str:
 
     threading.Thread(target=server.serve_forever, daemon=True).start()
     actual = server.server_address[1]
-    url = f"http://127.0.0.1:{actual}/?token={token}"
+    # Publish a token-less URL so the session token is not leaked in the
+    # browser address bar, history, or Referer. The page fetches the token
+    # from /api/token (same-origin) after it loads.
+    url = f"http://127.0.0.1:{actual}/"
 
     # Don't blindly overwrite the shared link/token files: if they already
     # point at a DIFFERENT port and something is actually answering there,

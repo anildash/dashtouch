@@ -1,4 +1,19 @@
-const token = new URLSearchParams(location.search).get("token");
+let token = null;
+// Fetch the session token from the local helper after the page loads. The
+// URL no longer carries the token, so the page must request it from the
+// same-origin endpoint /api/token. Remote origins cannot read this
+// response due to same-origin policy (and the server does not set CORS).
+(async function fetchToken() {
+  try {
+    const r = await fetch("/api/token", {credentials: 'same-origin'});
+    if (r.ok) {
+      const j = await r.json();
+      token = j.token;
+    }
+  } catch (e) {
+    // ignore — token stays null and UI shows a helpful banner below
+  }
+})();
 let enrolling = false;
 let logInterval = null;
 let lastStatus = null;
@@ -97,9 +112,12 @@ function revealHelpForHash() {
   });
 }
 
+// The token fetch above is async; if it hasn't arrived yet, show the
+// helpful missing-token banner. The banner will remain if no token is
+// available, and once the token arrives the page will start functioning.
 if (!token) {
   const banner = document.getElementById("banner");
-  banner.textContent = "Heads up — this page is missing its key, so buttons won't work. Open the link the helper prints when it starts, or run .venv/bin/dashtouch enroll.";
+  banner.textContent = "Heads up — this page is missing its key, so buttons won't work. Open the helper with `dashtouch enroll` if this persists.";
   banner.hidden = false;
 }
 
