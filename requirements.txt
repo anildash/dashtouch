@@ -1,3 +1,11 @@
-pytest
-pyserial
-cryptography
+# CI's dependency set, and a stable cache key for the pip cache.
+#
+# The runtime half must stay in step with helper/pyproject.toml's
+# `dependencies` — that file is what actually governs an install, this one
+# only pins CI. Upper bounds are here so a major release of either library
+# can't turn a green branch red overnight; raise them deliberately.
+pyserial>=3.5,<4
+cryptography>=42,<51
+
+# Test-only, so it has no counterpart in pyproject.toml.
+pytest>=8,<10

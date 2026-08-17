@@ -13,15 +13,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Show environment
-        run: |
-          python --version
-          uname -a
-          pwd
-          ls -la
       - name: Cache pip
         uses: actions/cache@v4
         with:
@@ -29,14 +23,17 @@ jobs:
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
-      - name: Install runtime/test deps
+      # Same two steps CONTRIBUTING.md tells a contributor to run, so CI is
+      # actually exercising the documented setup rather than a PYTHONPATH
+      # shortcut that only works here.
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install -e helper --no-deps
       - name: Run unit tests (skip integration)
-        run: |
-          cd helper
-          PYTHONPATH=. pytest -q -m "not integration"
+        working-directory: helper
+        run: pytest -q -m "not integration"
 
   integration:
     name: Integration tests (slow)
@@ -46,15 +43,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Show environment
-        run: |
-          python --version
-          uname -a
-          pwd
-          ls -la
       - name: Cache pip
         uses: actions/cache@v4
         with:
@@ -62,11 +53,11 @@ jobs:
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
-      - name: Install runtime/test deps
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install -e helper --no-deps
       - name: Run integration tests
-        run: |
-          cd helper
-          PYTHONPATH=. pytest -q -m integration
+        working-directory: helper
+        run: pytest -q -m integration

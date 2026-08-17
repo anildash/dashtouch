@@ -45,12 +45,16 @@ with both devices, a soldering iron, and an afternoon could extract it
 and impersonate the gadget to your Mac. The ESP32 chip supports one-way
 hardware protections (secure boot, flash encryption) that close this;
 they're permanent and unforgiving, so we document them but don't burn
-them for you. There's a third copy of that same key, in plaintext, on
-the Mac side too: `firmware/dashtouch/secrets.h`, written by
-`dashtouch setup`/`dashtouch pairing` right before flashing. It's
-gitignored and never leaves your machine, and it's owner-read-only
-(mode `0600`) — but if someone has file access to your Mac, that file
-is as good as the Keychain entry.
+them for you. A third copy of that same key has to exist in plaintext on
+the Mac side, briefly: `firmware/dashtouch/secrets.h`, which
+`dashtouch setup`/`dashtouch pairing` write right before flashing,
+because the key has to be compiled into the firmware. It's gitignored,
+owner-read-only (mode `0600`), and deleted as soon as the flash
+succeeds — so in normal operation it isn't on your disk at all. If a
+flash *fails*, it's deliberately left behind so you can retry by hand;
+that's the one case where it lingers, and it's worth deleting once
+you're done, because anyone with file access to your Mac would find it
+as good as the Keychain entry.
 
 **The fingerprint sensor itself is the trusting sort.** The sensor and
 the QT Py chat over a plain serial line with no authentication — that's
@@ -59,8 +63,16 @@ wiring could fake a "match" signal. The classic hobbyist fix is potting
 the electronics in epoxy so tampering means destroying it.
 
 **The browser page is local-only.** The enrollment page lives at
-`127.0.0.1` — your Mac only — and every action needs a session token, so
-a random website you have open can't quietly enroll a finger.
+`127.0.0.1` — your Mac only — and every action that changes something
+needs a session token, so a random website you have open can't quietly
+enroll a finger. The helper also checks that each request actually
+addressed it as `127.0.0.1` or `localhost`. That second check matters
+more than it sounds: binding to `127.0.0.1` keeps out remote *packets*,
+but not remote *pages*. A site can point a hostname it controls at
+`127.0.0.1` — DNS rebinding — and your browser will then treat that site
+as being the same origin as the helper, which is normally enough to read
+the session token straight out of the page's own API. Checking the
+`Host` header is what tells a real local page apart from a rebound one.
 
 **Replays don't work.** Every match event is numbered and signed;
 yesterday's captured USB traffic can't be replayed today.[^replay-boot]

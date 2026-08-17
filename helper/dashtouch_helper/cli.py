@@ -253,6 +253,17 @@ def cmd_password(args) -> int:
     return 1
 
 
+def _print_secrets_cleanup_note() -> None:
+    """A successful flash deletes secrets.h on its way out; the failure paths
+    deliberately leave it so a by-hand retry can compile. Say so, since that
+    leaves a plaintext copy of the pairing key sitting on disk until the
+    person does something about it."""
+    print("\nHeads up: firmware/dashtouch/secrets.h is still on disk, because")
+    print("the flash didn't finish — a by-hand compile needs it. It's a")
+    print("plaintext copy of your pairing key, so delete it once you're done:")
+    print(f"  rm {SECRETS_PATH}")
+
+
 def cmd_pairing(args) -> int:
     serial_no = args.serial or daemon_mod.DEFAULT_SERIAL
 
@@ -285,12 +296,14 @@ def cmd_pairing(args) -> int:
         print("so it won't work until you flash. Fix the error above and run:")
         print(f"  arduino-cli compile --fqbn {FQBN} firmware/dashtouch")
         print("  arduino-cli upload --fqbn " + FQBN + " -p <port> firmware/dashtouch")
+        _print_secrets_cleanup_note()
         return 1
     else:
         print("\nThe gadget still has the OLD key and won't work until it's")
         print("reflashed. When you're ready, plug it in and run:")
         print(f"  arduino-cli compile --fqbn {FQBN} firmware/dashtouch")
         print("  arduino-cli upload --fqbn " + FQBN + " -p <port> firmware/dashtouch")
+        _print_secrets_cleanup_note()
         return 0
 
 
