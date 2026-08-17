@@ -146,19 +146,21 @@ def test_start_reuses_existing_token(tmp_path, monkeypatch):
     assert f"token={seeded_token}" in url
 
 
-def test_start_creates_token_file(tmp_path, monkeypatch):
-    # Token persistence is Keychain-backed in production; tests use the
-    # fake keychain that reads/writes webui.TOKEN_PATH. Validate via the
-    # keychain interface rather than reading the file directly.
+def test_start_persists_a_freshly_generated_token(tmp_path, monkeypatch):
+    # Token persistence is Keychain-backed in production; tests use the fake
+    # keychain that reads/writes webui.TOKEN_PATH. Asserting only that the
+    # URL carries *a* token is not enough: a duplicated
+    # `token_freshly_generated = token is None` block once left that always
+    # False, so the token was never written to the Keychain at all and
+    # `dashtouch pins` (which reads it back) broke, with the suite still green.
     monkeypatch.setattr(webui, "TOKEN_PATH", tmp_path / "token")
+    from dashtouch_helper import keychain
+
     d = FakeDaemon()
     url = webui.start(d, port=0)
-    # The returned URL contains the token — that's the canonical source
-    # for programmatic callers. Persisting to Keychain/file is a local
-    # implementation detail and may vary by platform.
     token_content = url.split("token=")[1]
     assert len(token_content) >= 16
-    assert f"token={token_content}" in url
+    assert keychain.get_session_token() == token_content
 
 
 def test_start_with_token_path_as_directory(tmp_path, monkeypatch):
@@ -855,3 +857,62 @@ def test_pause_malformed_body_rejected():
     status, _ = req(host, port, "POST", "/api/pause", None, token)
     assert status == 400
     assert d.sent == []
+
+
+# -- DNS rebinding: binding to 127.0.0.1 stops remote packets, not remote
+# pages. A site that points a hostname it controls at 127.0.0.1 becomes
+# same-origin in the browser's eyes, and same-origin is all it takes to read
+# /api/token and then drive the mutating routes. The Host header is what
+# tells the two apart. ----------------------------------------------------
+
+def req_with_host(host, port, method, path, host_header, body=None, token=None):
+    c = http.client.HTTPConnection(host, port, timeout=3)
+    headers = {"Content-Type": "application/json", "Host": host_header}
+    if token:
+        headers["X-DT-Token"] = token
+    c.request(method, path, json.dumps(body) if body else None, headers)
+    r = c.getresponse()
+    return r.status, json.loads(r.read() or b"{}")
+
+
+def test_token_endpoint_rejects_rebound_host():
+    d, host, port, token = start()
+    status, body = req_with_host(host, port, "GET", "/api/token", "evil.example")
+    assert status == 403
+    assert body["error"] == "bad host"
+
+
+def test_token_endpoint_rejects_rebound_host_with_matching_port():
+    # The port lining up is not evidence of anything — a rebinding attacker
+    # picks the port. Only the hostname distinguishes the cases.
+    d, host, port, token = start()
+    status, _ = req_with_host(host, port, "GET", "/api/token",
+                              f"evil.example:{port}")
+    assert status == 403
+
+
+def test_mutating_route_rejects_rebound_host_even_with_a_valid_token():
+    d, host, port, token = start()
+    status, _ = req_with_host(host, port, "POST", "/api/enroll",
+                              f"evil.example:{port}",
+                              {"slot": 2, "label": "x"}, token)
+    assert status == 403
+    assert d.sent == []
+
+
+def test_status_rejects_rebound_host():
+    # /api/status needs no token, so the Host check is the only thing
+    # keeping a rebound page from reading the device's state.
+    d, host, port, token = start()
+    status, _ = req_with_host(host, port, "GET", "/api/status", "evil.example")
+    assert status == 403
+
+
+def test_loopback_hosts_are_accepted():
+    d, host, port, token = start()
+    for host_header in (f"127.0.0.1:{port}", f"localhost:{port}",
+                        f"LOCALHOST:{port}"):
+        status, body = req_with_host(host, port, "GET", "/api/token",
+                                     host_header)
+        assert status == 200, host_header
+        assert body["token"] == token

@@ -1,19 +1,31 @@
 let token = null;
-// Fetch the session token from the local helper after the page loads. The
-// URL no longer carries the token, so the page must request it from the
-// same-origin endpoint /api/token. Remote origins cannot read this
-// response due to same-origin policy (and the server does not set CORS).
-(async function fetchToken() {
+// The URL no longer carries the session token, so the page asks the helper
+// for it at load. That makes the token *late* rather than absent, which the
+// rest of this file has to respect: anything that reads `token` must await
+// tokenReady first, or it runs during the fetch window and sends a null.
+const tokenReady = (async function fetchToken() {
   try {
-    const r = await fetch("/api/token", {credentials: 'same-origin'});
-    if (r.ok) {
-      const j = await r.json();
-      token = j.token;
-    }
+    const r = await fetch("/api/token", {credentials: "same-origin"});
+    if (r.ok) token = (await r.json()).token;
   } catch (e) {
-    // ignore — token stays null and UI shows a helpful banner below
+    // Ignore — showTokenBanner below is how this surfaces to the person.
   }
+  showTokenBanner(!token);
+  return token;
 })();
+
+// Only complain once the fetch has actually resolved. Showing this banner
+// synchronously at load would fire on every single page view, because the
+// token has never arrived yet at that point.
+function showTokenBanner(missing) {
+  const banner = document.getElementById("banner");
+  if (!missing) {
+    banner.hidden = true;
+    return;
+  }
+  banner.textContent = "Heads up — this page couldn't get its key from the helper, so buttons won't work. Close this tab and run .venv/bin/dashtouch enroll.";
+  banner.hidden = false;
+}
 let enrolling = false;
 let logInterval = null;
 let lastStatus = null;
@@ -110,15 +122,6 @@ function revealHelpForHash() {
     const el = document.getElementById(location.hash.slice(1));
     if (el) el.scrollIntoView({block: "center"});
   });
-}
-
-// The token fetch above is async; if it hasn't arrived yet, show the
-// helpful missing-token banner. The banner will remain if no token is
-// available, and once the token arrives the page will start functioning.
-if (!token) {
-  const banner = document.getElementById("banner");
-  banner.textContent = "Heads up — this page is missing its key, so buttons won't work. Open the helper with `dashtouch enroll` if this persists.";
-  banner.hidden = false;
 }
 
 // -- on-demand update check: the product's one and only outbound network
@@ -223,7 +226,9 @@ function isSafeLinkUrl(s) {
 }
 
 async function checkForUpdates() {
-  if (updateChecking || !token) return;
+  if (updateChecking) return;
+  await tokenReady;
+  if (!token) return;
   updateChecking = true;
   const btn = document.getElementById("update-check-btn");
   btn.disabled = true;
@@ -611,6 +616,7 @@ let pauseActive = false;
 let pauseRefreshTimer = null;
 
 async function sendPause(paused) {
+  await tokenReady;
   if (!token) return;
   try {
     await fetch("/api/pause", {method: "POST",
@@ -666,6 +672,7 @@ function selectTile(slot) {
 }
 
 async function startEnroll() {
+  await tokenReady;
   if (!lastStatus) return;
   const slot = lowestFreeSlot(lastStatus);
   if (slot === null) return;
@@ -694,6 +701,7 @@ async function startEnroll() {
 }
 
 async function saveFingerName(slot, value, isRename) {
+  await tokenReady;
   try {
     const response = await fetch("/api/label", {method: "POST",
       headers: {"Content-Type": "application/json", "X-DT-Token": token},
@@ -710,6 +718,7 @@ async function saveFingerName(slot, value, isRename) {
 }
 
 async function removeFinger(slot) {
+  await tokenReady;
   try {
     const response = await fetch("/api/delete", {method: "POST",
       headers: {"Content-Type": "application/json", "X-DT-Token": token},
@@ -749,6 +758,7 @@ const COLOR_COLLISION_MEANING = {
 };
 
 async function postSetting(key, value) {
+  await tokenReady;
   try {
     const response = await fetch("/api/settings", {method: "POST",
       headers: {"Content-Type": "application/json", "X-DT-Token": token},
@@ -1026,6 +1036,7 @@ function formatEvent(e) {
 }
 
 async function fetchLog() {
+  await tokenReady;
   if (!token) return;
   try {
     const r = await fetch("/api/log", {headers: {"X-DT-Token": token}});

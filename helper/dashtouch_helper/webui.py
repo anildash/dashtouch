@@ -183,7 +183,27 @@ def _make_handler(daemon, token):
             self.end_headers()
             self.wfile.write(body)
 
+        def _host_allowed(self):
+            """Reject any request whose Host header isn't the loopback origin
+            we're actually serving on.
+
+            Binding to 127.0.0.1 stops remote *packets*, not remote *pages*.
+            A site on the public internet can point a hostname it controls at
+            127.0.0.1 (DNS rebinding); the browser then treats
+            http://evil.example:3274 as same-origin with us, which is enough
+            to GET /api/token and use it to drive the mutating routes. The
+            token can't defend against that on its own — /api/token hands it
+            to anything the browser considers same-origin. The Host header is
+            what distinguishes the two cases: a real local page sends the
+            literal loopback address, a rebound one sends its own name."""
+            host = (self.headers.get("Host") or "").lower()
+            port = self.server.server_address[1]
+            return host in (f"127.0.0.1:{port}", f"localhost:{port}")
+
         def do_GET(self):
+            if not self._host_allowed():
+                self._json(403, {"error": "bad host"})
+                return
             path = self.path.split("?")[0]
             if path in ("/", "/index.html"):
                 self._static("index.html", "text/html")
@@ -205,13 +225,20 @@ def _make_handler(daemon, token):
                     events = list(daemon.events)
                 self._json(200, {"events": events})
             elif path == "/api/token":
-                # Same-origin page can fetch the session token; do NOT set CORS
-                # headers so remote origins cannot read this response.
+                # The page fetches its token here, since the URL no longer
+                # carries one. Two things keep this from being a giveaway:
+                # no CORS headers, so an ordinary cross-origin page can't read
+                # the response, and the Host check above, which is what closes
+                # the DNS-rebinding path around same-origin policy.
                 self._json(200, {"token": token})
             else:
                 self.send_error(404)
 
         def do_POST(self):
+            if not self._host_allowed():
+                daemon.log_event("web", "rejected: bad host")
+                self._json(403, {"error": "bad host"})
+                return
             if not secrets.compare_digest(self.headers.get("X-DT-Token") or "", token):
                 daemon.log_event("web", "rejected: bad token")
                 self._json(403, {"error": "bad token"})
@@ -392,10 +419,6 @@ def start(daemon, port: int = 3274) -> str:
     except Exception:
         # Keychain import failed (non-macOS environment) — do not persist to disk.
         existing = None
-
-    token_freshly_generated = token is None
-    if token is None:
-        token = secrets.token_urlsafe(24)
 
     token_freshly_generated = token is None
     if token is None:

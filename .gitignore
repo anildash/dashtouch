@@ -3,7 +3,11 @@
 __pycache__/
 *.pyc
 
-firmware/dashtouch/secrets.h
+# Plaintext pairing keys. Matched by name anywhere under firmware/, not just
+# in dashtouch/ — a stray secrets.h in a sketch directory nobody's tracking is
+# exactly the one that gets swept up by `git add -A`.
+firmware/**/secrets.h
+!firmware/**/secrets.example.h
 
 # Cloned third-party reference code (see docs/superpowers/references/)
 reference/

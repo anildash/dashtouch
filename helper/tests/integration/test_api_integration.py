@@ -1,10 +1,23 @@
-import http.client
-import json
+"""End-to-end: the CLI talking to a live helper over HTTP.
+
+The unit tests in test_webui.py already drive a real server over real
+sockets, so re-testing the HTTP surface here would buy nothing. What isn't
+covered anywhere else is the seam *between* the two halves — the helper
+mints a session token and stores it in the Keychain, and later a separate
+`dashtouch` process reads it back out to authenticate. Nothing in either
+half's own tests notices when that handoff breaks.
+
+It has broken: a duplicated `token_freshly_generated = token is None` in
+webui.start() left the flag permanently False, so the token was never
+written to the Keychain and `dashtouch pins` failed with "Session token
+unavailable in Keychain" — while every unit test stayed green.
+"""
 import threading
 import time
 
 import pytest
-from dashtouch_helper import webui
+
+from dashtouch_helper import cli, webui
 
 
 class FakeDaemon:
@@ -23,42 +36,42 @@ class FakeDaemon:
         self.events.append({"t": time.time(), "dir": direction, "text": text})
 
     def health(self):
-        return [{"id": "device", "label": "Device", "ok": True, "state": "ok", "detail": "Connected", "fix": "help"}]
-
-
-def start():
-    d = FakeDaemon()
-    url = webui.start(d, port=0)
-    host, port = url.split("//")[1].split("/")[0].split(":")
-    token = url.split("token=")[1]
-    return d, host, int(port), token
-
-
-def req(host, port, method, path, body=None, token=None):
-    c = http.client.HTTPConnection(host, port, timeout=3)
-    headers = {"Content-Type": "application/json"}
-    if token:
-        headers["X-DT-Token"] = token
-    c.request(method, path, json.dumps(body) if body else None, headers)
-    r = c.getresponse()
-    return r.status, json.loads(r.read() or b"{}")
+        return [{"id": "device", "label": "Device", "ok": True,
+                 "state": "ok", "detail": "Connected", "fix": "help"}]
 
 
 @pytest.mark.integration
-def test_api_token_and_enroll_flow():
-    d, host, port, token = start()
+def test_cli_reaches_live_helper_using_the_stored_session_token(monkeypatch):
+    """`dashtouch pins` in miniature: start the helper, then authenticate to
+    it from the CLI side using only what the helper left in the Keychain."""
+    d = FakeDaemon()
+    webui.start(d, port=0)
 
-    # GET /api/token should return the same token that was embedded in the
-    # returned URL for programmatic callers.
-    status, body = req(host, port, "GET", "/api/token")
-    assert status == 200
-    assert body.get("token") == token
+    # The CLI finds the helper the same way the real command does — via the
+    # link the helper persisted — and gets its token from the Keychain, not
+    # from anything this test hands it.
+    monkeypatch.setattr(cli, "webui", webui)
 
-    # POST /api/enroll without token should be rejected
-    status, _ = req(host, port, "POST", "/api/enroll", {"slot": 1, "label": "x"})
-    assert status == 403
+    status_code, _ = cli._daemon_post_setting("fp_swap", 1)
 
-    # POST /api/enroll with token should be accepted and send command
-    status, _ = req(host, port, "POST", "/api/enroll", {"slot": 2, "label": "right"}, token)
-    assert status == 202
-    assert d.sent == ["ENROLL 2"]
+    assert status_code == 202
+    assert d.sent == ["SET fp_swap 1"]
+
+
+@pytest.mark.integration
+def test_cli_fails_clearly_when_no_token_was_ever_stored(monkeypatch):
+    """The other half of the seam: if the helper never stored a token, the
+    CLI must say so plainly rather than sending an empty header and getting
+    an opaque 403 back."""
+    from dashtouch_helper import keychain
+
+    d = FakeDaemon()
+    webui.start(d, port=0)
+
+    def no_token():
+        raise keychain.KeychainError("nothing stored")
+
+    monkeypatch.setattr(keychain, "get_session_token", no_token)
+
+    with pytest.raises(RuntimeError, match="Session token unavailable"):
+        cli._daemon_post_setting("fp_swap", 1)
