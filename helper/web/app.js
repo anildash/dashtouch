@@ -170,7 +170,7 @@ function showUpdateTab(data) {
        than later.</p>`
     : "";
   const releaseLink = isSafeLinkUrl(data.url)
-    ? `<p><a href="${escapeAttr(data.url)}" target="_blank" rel="noopener">More about this release</a></p>`
+    ? `<p><a href="${escapeAttr(data.url)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">More about this release</a></p>`
     : "";
 
   panel.innerHTML = `${lede}
