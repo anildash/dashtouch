@@ -711,3 +711,26 @@ def test_run_forever_stops_reading_when_ser_dropped_mid_loop(monkeypatch):
     monkeypatch.setattr(daemon.time, "sleep", boom)
     with pytest.raises(RuntimeError):
         d.run_forever()
+
+
+def test_health_picks_up_a_repaired_keychain_without_a_restart():
+    # health() used to read the cached credential fields only, so a pairing
+    # key repaired after startup still showed "Key missing" until the next
+    # match — which sends you to re-run the command that just worked.
+    err = daemon.keychain.KeychainError("corrupt")
+    with mock.patch.object(daemon.keychain, "get_pairing_key", side_effect=err), \
+         mock.patch.object(daemon.keychain, "get_password", return_value="pw123"):
+        d = daemon.Daemon("SER1")
+        d._ser = FakeSerial()
+        rows = {r["id"]: r for r in d.health()}
+        assert rows["pairing"]["state"] == "bad"
+        # One Keychain error clears both values, so the password row goes
+        # red too even though the password itself was readable.
+        assert rows["password"]["state"] == "bad"
+
+    d._creds_loaded_at = 0.0  # expire the TTL, as the passage of time would
+    with mock.patch.object(daemon.keychain, "get_pairing_key", return_value=KEY), \
+         mock.patch.object(daemon.keychain, "get_password", return_value="pw123"):
+        rows = {r["id"]: r for r in d.health()}
+    assert rows["pairing"]["state"] == "ok"
+    assert rows["password"]["state"] == "ok"

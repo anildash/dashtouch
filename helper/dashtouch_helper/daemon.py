@@ -282,6 +282,13 @@ class Daemon:
     # -- health snapshot (backs the web UI's Checkup list) -------------------
     def health(self) -> list[dict]:
         """Computed fresh on every call — cheap checks, no caching needed."""
+        # Re-read the Keychain (TTL-cached, so at most once every few
+        # seconds) rather than trusting whatever was cached at construction.
+        # _refresh_credentials exists so `dashtouch pairing`/`password` take
+        # effect without a helper restart; reading only the cached fields
+        # here left the Checkup showing "Key missing" long after the key was
+        # fixed, which sends people to re-run the very command that worked.
+        self._refresh_credentials()
         connected = self.state["connected"]
         rows = []
 
