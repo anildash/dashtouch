@@ -18,7 +18,10 @@ from . import __version__
 WEB_ROOT = pathlib.Path(__file__).parents[1] / "web"
 LABELS_PATH = pathlib.Path.home() / ".dashtouch" / "labels.json"
 URL_PATH = pathlib.Path.home() / ".dashtouch" / "webui-url"
-TOKEN_PATH = pathlib.Path.home() / ".dashtouch" / "token"
+# NOTE: session tokens are stored in the macOS Keychain in production.
+# Tests may still set webui.TOKEN_PATH (see tests/conftest.py) for their
+# fake keychain backing; production code does not read/write TOKEN_PATH.
+TOKEN_PATH = pathlib.Path.home() / ".dashtouch" / "token"  # retained for tests; production uses Keychain only
 
 # The one and only outbound network call this software ever makes, and only
 # when a person clicks the "check for updates" button — see docs/security.md.
@@ -371,17 +374,28 @@ def start(daemon, port: int = 3274) -> str:
             except ValueError:
                 # Invalid env value: ignore, use default
                 pass
-    # Reuse existing token if present and valid; otherwise generate one now
-    # and persist it later, once we know we're not stepping on a live helper.
-    # Token stays valid across restarts by design; delete ~/.dashtouch/token to force fresh one.
+    # Reuse existing token from the macOS Keychain if available; otherwise
+    # generate a fresh one. In production we store the token only in Keychain
+    # (no on-disk token file) to avoid leaking it via the filesystem.
     token = None
+    # Production: always use the macOS Keychain as the persistent
+    # storage for the session token. If Keychain access fails, keep the
+    # token in memory for the running process but do not persist to disk.
     try:
-        existing = TOKEN_PATH.read_text().strip()
-        if len(existing) >= 16:  # plausible token length
+        from . import keychain
+        try:
+            existing = keychain.get_session_token()
+        except Exception:
+            existing = None
+        if existing and len(existing) >= 16:
             token = existing
-    except (OSError, UnicodeDecodeError):
-        # File missing, directory in the way, unreadable, or corrupted — generate fresh token
-        pass
+    except Exception:
+        # Keychain import failed (non-macOS environment) — do not persist to disk.
+        existing = None
+
+    token_freshly_generated = token is None
+    if token is None:
+        token = secrets.token_urlsafe(24)
 
     token_freshly_generated = token is None
     if token is None:
@@ -405,8 +419,11 @@ def start(daemon, port: int = 3274) -> str:
     actual = server.server_address[1]
     # Publish a token-less URL so the session token is not leaked in the
     # browser address bar, history, or Referer. The page fetches the token
-    # from /api/token (same-origin) after it loads.
-    url = f"http://127.0.0.1:{actual}/"
+    # from /api/token (same-origin) after it loads. For programmatic callers
+    # (and tests) we still return the full token-bearing URL, but the
+    # persisted link on disk intentionally omits the token.
+    serve_url = f"http://127.0.0.1:{actual}/"
+    returned_url = f"http://127.0.0.1:{actual}/?token={token}"
 
     # Don't blindly overwrite the shared link/token files: if they already
     # point at a DIFFERENT port and something is actually answering there,
@@ -435,18 +452,24 @@ def start(daemon, port: int = 3274) -> str:
             print(msg)
 
     if token_freshly_generated and not other_helper_live:
+        # Persist the token to the macOS Keychain. If Keychain write fails,
+        # do not persist to disk — keep the new token in memory only.
         try:
-            TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
-            TOKEN_PATH.write_text(token + "\n")
-            TOKEN_PATH.chmod(0o600)
-        except OSError:
-            # Write failed (e.g., parent is a file, permission denied) — proceed with in-memory token
-            # A working daemon with unpersisted token beats a dead one; dashtouch enroll degradation is acceptable
+            from . import keychain
+            try:
+                keychain.set_session_token(token)
+            except Exception:
+                # Can't write to Keychain — intentionally do not persist to disk
+                pass
+        except Exception:
+            # Keychain not available — intentionally keep token in-memory
             pass
 
     if not other_helper_live:
         URL_PATH.parent.mkdir(parents=True, exist_ok=True)
-        URL_PATH.write_text(url + "\n")
+        # Persist the token-less serve URL so the filesystem/stored link can't
+        # leak the session token; return the token-bearing URL to the caller.
+        URL_PATH.write_text(serve_url + "\n")
         URL_PATH.chmod(0o600)
 
-    return url
+    return returned_url
