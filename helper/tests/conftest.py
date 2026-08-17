@@ -1,6 +1,41 @@
+import subprocess
+
 import pytest
 
 from dashtouch_helper import webui
+
+
+@pytest.fixture(autouse=True)
+def never_touch_the_real_keychain(monkeypatch):
+    """Make any test that actually shells out to `security` fail loudly.
+
+    This is not hypothetical. A test that seeded a session token was written
+    one commit before the mocking that made it safe, and in that window it
+    wrote its fixture string — "seededtoken12345678", a constant sitting in
+    a public repo — into a real login Keychain. Nothing failed, nothing was
+    logged, and it surfaced only weeks later when a helper read it back and
+    started serving it as a live session token.
+
+    The tests that legitimately exercise keychain.py patch `subprocess.run`
+    themselves, so they never arrive here. Anything that does arrive here is
+    a mocking gap, and the only safe outcome is a loud one. Note this guards
+    the real subprocess module, not keychain._run — a gap in how keychain is
+    patched is exactly the failure being defended against.
+    """
+    real_run = subprocess.run
+
+    def guarded_run(args, *a, **kw):
+        argv0 = args[0] if isinstance(args, (list, tuple)) and args else args
+        if isinstance(argv0, str) and argv0.split("/")[-1] == "security":
+            raise AssertionError(
+                "a test tried to run the real `security` binary: "
+                f"{args!r}\nThis would read or write the developer's actual "
+                "login Keychain. Patch subprocess.run (see test_keychain.py) "
+                "or the keychain function you're exercising."
+            )
+        return real_run(args, *a, **kw)
+
+    monkeypatch.setattr(subprocess, "run", guarded_run)
 
 
 @pytest.fixture(autouse=True)

@@ -130,20 +130,25 @@ def test_start_persists_tokened_url(tmp_path, monkeypatch):
     assert "token=" in url
 
 
-def test_start_reuses_existing_token(tmp_path, monkeypatch):
+def test_start_never_adopts_a_stored_token(tmp_path, monkeypatch):
+    # The helper used to reuse any stored token of 16+ characters. That's how
+    # a test fixture string, written into a real Keychain by an earlier
+    # mocking gap, ended up being served as a live session token. Whatever is
+    # in storage, a new run mints its own and overwrites it.
     monkeypatch.setattr(webui, "TOKEN_PATH", tmp_path / "token")
-    # Pre-seed the token in the (fake) keychain used by tests
-    seeded_token = "seededtoken12345678"
     from dashtouch_helper import keychain
-    try:
-        keychain.set_session_token(seeded_token)
-    except Exception:
-        # If fake keychain isn't available for some reason, fall back to file
-        (tmp_path / "token").write_text(seeded_token + "\n")
+
+    stale = "x" * 40
+    keychain.set_session_token(stale)
 
     d = FakeDaemon()
     url = webui.start(d, port=0)
-    assert f"token={seeded_token}" in url
+    token = url.split("token=")[1]
+
+    assert token != stale
+    assert len(token) >= 16
+    # ...and the stale value is gone from storage, not just unused.
+    assert keychain.get_session_token() == token
 
 
 def test_start_persists_a_freshly_generated_token(tmp_path, monkeypatch):

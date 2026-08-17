@@ -401,28 +401,21 @@ def start(daemon, port: int = 3274) -> str:
             except ValueError:
                 # Invalid env value: ignore, use default
                 pass
-    # Reuse existing token from the macOS Keychain if available; otherwise
-    # generate a fresh one. In production we store the token only in Keychain
-    # (no on-disk token file) to avoid leaking it via the filesystem.
-    token = None
-    # Production: always use the macOS Keychain as the persistent
-    # storage for the session token. If Keychain access fails, keep the
-    # token in memory for the running process but do not persist to disk.
-    try:
-        from . import keychain
-        try:
-            existing = keychain.get_session_token()
-        except Exception:
-            existing = None
-        if existing and len(existing) >= 16:
-            token = existing
-    except Exception:
-        # Keychain import failed (non-macOS environment) — do not persist to disk.
-        existing = None
-
-    token_freshly_generated = token is None
-    if token is None:
-        token = secrets.token_urlsafe(24)
+    # A brand-new token on every start, never one read back from storage.
+    #
+    # This used to reuse whatever was in the Keychain if it was at least 16
+    # characters. Nothing needs that: the token only has to be readable while
+    # a helper is running, so the CLI can authenticate to it, and the helper
+    # writes it below before anyone can ask. Surviving a restart bought
+    # nothing and cost plenty — a test once wrote its fixture string
+    # ("seededtoken12345678", a constant in a public repo) into a real
+    # Keychain, and the reuse path meant a live helper then adopted it and
+    # served it as a real session token. A value that only ever travels
+    # outward can't be poisoned that way.
+    #
+    # Stored in the Keychain and never on disk, so the filesystem can't leak
+    # it either.
+    token = secrets.token_urlsafe(24)
 
     # Create handler with captured token
     Handler = _make_handler(daemon, token)
@@ -474,9 +467,12 @@ def start(daemon, port: int = 3274) -> str:
             daemon.log_event("helper", msg)
             print(msg)
 
-    if token_freshly_generated and not other_helper_live:
-        # Persist the token to the macOS Keychain. If Keychain write fails,
-        # do not persist to disk — keep the new token in memory only.
+    if not other_helper_live:
+        # Publish this run's token to the Keychain so the CLI can authenticate
+        # to us. Skipped when another helper holds the real hardware: that
+        # one's token is the one the CLI should be finding, and ours would
+        # just displace it. If the Keychain write fails, the token stays in
+        # memory for this process — never written to disk as a fallback.
         try:
             from . import keychain
             try:

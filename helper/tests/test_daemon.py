@@ -50,6 +50,22 @@ def make_daemon():
     return d
 
 
+def make_unconfigured_daemon():
+    """A daemon whose Keychain lookups fail, i.e. setup never finished.
+
+    Say that with mocks rather than by constructing a bare Daemon and letting
+    the lookup miss for real: a real miss shells out to `security` against the
+    developer's own login Keychain, which is both a side effect no test should
+    have and a thing that doesn't exist on the Linux CI runners.
+    """
+    err = daemon.keychain.KeychainError("nothing stored")
+    with mock.patch.object(daemon.keychain, "get_pairing_key", side_effect=err), \
+         mock.patch.object(daemon.keychain, "get_password", side_effect=err):
+        d = daemon.Daemon("SER1")
+    d._ser = FakeSerial()
+    return d
+
+
 def test_boot_resets_counter():
     d = make_daemon()
     d._last_counter = 99
@@ -233,8 +249,7 @@ def test_health_rows_carry_state_string():
 
 
 def test_disconnected_device_reports_bad_state():
-    d = daemon.Daemon("SER1")
-    d._ser = FakeSerial()
+    d = make_unconfigured_daemon()
     rows = {r["id"]: r for r in d.health()}
     assert rows["device"]["ok"] is False
     assert rows["device"]["state"] == "bad"
@@ -279,8 +294,7 @@ def test_tampered_ev_does_not_record_last_match():
 
 def test_unconfigured_daemon_with_valid_ev_does_not_record_last_match():
     # No pairing key setup
-    d = daemon.Daemon("SER1")
-    d._ser = FakeSerial()
+    d = make_unconfigured_daemon()
     d.handle_line(VECTORS["ev_line"])
     assert d.state["last_match"] is None
 
@@ -394,7 +408,11 @@ def test_keychain_failure_at_match_time_is_graceful(monkeypatch):
     monkeypatch.setattr(daemon.time, "time", lambda: real_time() + 10)
     ev2 = make_ev_line(KEY, VECTORS["nonce"], VECTORS["counter"] + 1,
                        VECTORS["slot"], VECTORS["score"])
-    with mock.patch.object(daemon.keychain, "get_password",
+    # Both lookups have to be mocked here, not just the failing one: the TTL
+    # has expired, so this EV refreshes the pairing key too, and an unmocked
+    # call would read the real Keychain.
+    with mock.patch.object(daemon.keychain, "get_pairing_key", return_value=KEY), \
+         mock.patch.object(daemon.keychain, "get_password",
                            side_effect=daemon.keychain.KeychainError("locked")):
         d.handle_line(ev2)
 

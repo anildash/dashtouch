@@ -72,6 +72,12 @@ so if it works locally it should work there.
 
 CI runs on Linux, which has no macOS Keychain. The tests that cover Keychain
 behavior patch `subprocess.run`, so they exercise the real argument-building
-and read-back logic without ever invoking the `security` binary. Keep it that
-way — a test that shells out to `security` for real will pass on your Mac and
-fail in CI.
+and read-back logic without ever invoking the `security` binary.
+
+An autouse fixture in `helper/tests/conftest.py` enforces this: if a test
+reaches the real `security` binary, it fails immediately with a message
+pointing at the gap. That guard exists because a test once wrote its fixture
+string into a real login Keychain, silently, and a helper later read it back
+and served it as a live session token. If you hit that assertion, the fix is
+to mock the keychain function you're exercising — not to work around the
+guard.
