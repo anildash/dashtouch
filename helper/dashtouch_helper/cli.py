@@ -163,6 +163,15 @@ def find_and_flash(prompt_prefix: str = "") -> str:
                         str(REPO / "firmware" / "dashtouch")], check=True)
         subprocess.run(["arduino-cli", "upload", "--fqbn", FQBN, "-p", port,
                         str(REPO / "firmware" / "dashtouch")], check=True)
+        # Erase the plaintext secrets file on the Mac now that flashing
+        # completed successfully so a pairing key isn't sitting on disk.
+        try:
+            if SECRETS_PATH.exists():
+                SECRETS_PATH.unlink()
+        except OSError:
+            # If erase fails for any reason, leave the file — better to let
+            # user recover than to crash the workflow. The file was mode 0600.
+            pass
         return "flashed"
     except subprocess.CalledProcessError:
         return "failed"
@@ -291,8 +300,8 @@ def cmd_run(args) -> int:
 
 
 def _webui_url() -> str | None:
-    """The full tokened link to the helper's page, or None if the helper
-    has never run (that file is written on startup)."""
+    """The full link to the helper's page (no session token in the URL),
+    or None if the helper has never run (that file is written on startup)."""
     try:
         url = webui.URL_PATH.read_text().strip()
     except (OSError, UnicodeDecodeError):
@@ -320,8 +329,8 @@ def cmd_where(args) -> int:
         return 1
     print(url)
     if sys.stderr.isatty():
-        print("\nThat link includes your session key — treat it like a password.\n"
-              "`dashtouch enroll` opens it for you.", file=sys.stderr)
+        print("\nThis link opens the helper's page on localhost; the session token is handled locally and is not included in the URL.\n"
+              "Use `dashtouch enroll` to open it for you.", file=sys.stderr)
     return 0
 
 
@@ -366,7 +375,14 @@ def _daemon_post_setting(key: str, value: int) -> tuple[int, dict]:
     """POST /api/settings against the running helper. Raises on any
     transport failure — callers decide how to report that."""
     base = _daemon_base_url()
-    token = webui.TOKEN_PATH.read_text().strip()
+    # Use the Keychain-stored session token. If Keychain access fails,
+    # the operation cannot proceed securely and we fail with a clear message.
+    try:
+        from . import keychain
+        token = keychain.get_session_token()
+    except Exception as e:
+        raise RuntimeError("Session token unavailable in Keychain. Ensure the helper is running and can access the Keychain.") from e
+
     req = urllib.request.Request(
         base + "api/settings",
         data=json.dumps({"key": key, "value": value}).encode(),

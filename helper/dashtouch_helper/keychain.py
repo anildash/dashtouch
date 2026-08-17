@@ -9,6 +9,23 @@ import subprocess
 
 SERVICE_PASSWORD = "DashboardTouch"
 SERVICE_PAIRING = "DashboardTouch-pairing"
+SERVICE_SESSION = "DashboardTouch-session"
+
+
+def set_session_token(token: str) -> None:
+    """Store the running helper's session token in the macOS Keychain.
+
+    Uses a single account name "session" under SERVICE_SESSION.
+    """
+    _set(SERVICE_SESSION, "session", token)
+
+
+def get_session_token() -> str:
+    """Retrieve the stored session token from the Keychain.
+
+    Raises KeychainError if it couldn't be read.
+    """
+    return _get(SERVICE_SESSION, "session")
 
 
 class KeychainError(Exception):

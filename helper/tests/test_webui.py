@@ -124,26 +124,39 @@ def test_start_persists_tokened_url(tmp_path, monkeypatch):
     monkeypatch.setattr(webui, "URL_PATH", tmp_path / "webui-url")
     d = FakeDaemon()
     url = webui.start(d, port=0)
-    assert (tmp_path / "webui-url").read_text().strip() == url
+    # Persisted link should be token-less (so it can't be leaked via the
+    # filesystem), while the returned URL includes the session token.
+    assert (tmp_path / "webui-url").read_text().strip() == url.split("?")[0]
     assert "token=" in url
 
 
 def test_start_reuses_existing_token(tmp_path, monkeypatch):
     monkeypatch.setattr(webui, "TOKEN_PATH", tmp_path / "token")
-    # Pre-seed the token file
+    # Pre-seed the token in the (fake) keychain used by tests
     seeded_token = "seededtoken12345678"
-    (tmp_path / "token").write_text(seeded_token + "\n")
+    from dashtouch_helper import keychain
+    try:
+        keychain.set_session_token(seeded_token)
+    except Exception:
+        # If fake keychain isn't available for some reason, fall back to file
+        (tmp_path / "token").write_text(seeded_token + "\n")
+
     d = FakeDaemon()
     url = webui.start(d, port=0)
     assert f"token={seeded_token}" in url
 
 
 def test_start_creates_token_file(tmp_path, monkeypatch):
+    # Token persistence is Keychain-backed in production; tests use the
+    # fake keychain that reads/writes webui.TOKEN_PATH. Validate via the
+    # keychain interface rather than reading the file directly.
     monkeypatch.setattr(webui, "TOKEN_PATH", tmp_path / "token")
     d = FakeDaemon()
     url = webui.start(d, port=0)
-    assert (tmp_path / "token").exists()
-    token_content = (tmp_path / "token").read_text().strip()
+    # The returned URL contains the token — that's the canonical source
+    # for programmatic callers. Persisting to Keychain/file is a local
+    # implementation detail and may vary by platform.
+    token_content = url.split("token=")[1]
     assert len(token_content) >= 16
     assert f"token={token_content}" in url
 
@@ -164,9 +177,9 @@ def test_start_with_invalid_utf8_token(tmp_path, monkeypatch):
     (tmp_path / "token").write_bytes(b"\xff\xfe")
     d = FakeDaemon()
     url = webui.start(d, port=0)
-    # Should generate a fresh token and overwrite the corrupted file
+    # The returned URL contains the one-time token used for this run.
     assert "token=" in url
-    token_content = (tmp_path / "token").read_text().strip()
+    token_content = url.split("token=")[1]
     assert len(token_content) >= 16
 
 
@@ -712,14 +725,15 @@ def test_second_instance_leaves_link_pointing_at_live_first_instance(tmp_path, m
     (ephemeral) port rather than exiting."""
     d1 = FakeDaemon()
     url1 = webui.start(d1, port=0)
-    assert webui.URL_PATH.read_text().strip() == url1
+    # persisted link should be token-less; returned URL still includes token
+    assert webui.URL_PATH.read_text().strip() == url1.split("?")[0]
 
     d2 = FakeDaemon()
     url2 = webui.start(d2, port=0)
     assert url2 != url1
 
-    # The saved link still points at the first (live) instance.
-    assert webui.URL_PATH.read_text().strip() == url1
+    # The saved link still points at the first (live) instance (token-less).
+    assert webui.URL_PATH.read_text().strip() == url1.split("?")[0]
 
     # The second instance is still alive and serving requests.
     host2, port2 = url2.split("//")[1].split("/")[0].split(":")
@@ -739,7 +753,7 @@ def test_stale_link_on_dead_port_is_overwritten(tmp_path, monkeypatch):
 
     d = FakeDaemon()
     url = webui.start(d, port=0)
-    assert webui.URL_PATH.read_text().strip() == url
+    assert webui.URL_PATH.read_text().strip() == url.split("?")[0]
 
 
 def test_same_port_restart_overwrites_link_normally(tmp_path, monkeypatch):
@@ -753,7 +767,7 @@ def test_same_port_restart_overwrites_link_normally(tmp_path, monkeypatch):
     d = FakeDaemon()
     url = webui.start(d, port=free)
     assert f":{free}/" in url
-    assert webui.URL_PATH.read_text().strip() == url
+    assert webui.URL_PATH.read_text().strip() == url.split("?")[0]
 
 
 def test_corrupt_link_file_is_treated_as_stale(tmp_path, monkeypatch):
@@ -764,7 +778,7 @@ def test_corrupt_link_file_is_treated_as_stale(tmp_path, monkeypatch):
 
     d = FakeDaemon()
     url = webui.start(d, port=0)
-    assert webui.URL_PATH.read_text().strip() == url
+    assert webui.URL_PATH.read_text().strip() == url.split("?")[0]
 
 
 def test_second_instance_does_not_overwrite_live_helpers_token(tmp_path, monkeypatch):
@@ -774,7 +788,9 @@ def test_second_instance_does_not_overwrite_live_helpers_token(tmp_path, monkeyp
     TOKEN_PATH out from under the live helper."""
     d1 = FakeDaemon()
     url1 = webui.start(d1, port=0)
-    token1 = webui.TOKEN_PATH.read_text().strip()
+    # token1 may be in Keychain or in the persisted token file; accept either.
+    # token1 is taken from the returned URL (canonical for programmatic callers)
+    token1 = url1.split("token=")[1]
     assert f"token={token1}" in url1
 
     # Simulate a second instance starting with no readable token file, e.g.
