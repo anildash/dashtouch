@@ -3,6 +3,7 @@ import json
 import threading
 import time
 
+import pytest
 from dashtouch_helper import webui
 
 
@@ -43,6 +44,7 @@ def req(host, port, method, path, body=None, token=None):
     return r.status, json.loads(r.read() or b"{}")
 
 
+@pytest.mark.integration
 def test_api_token_and_enroll_flow():
     d, host, port, token = start()
 
