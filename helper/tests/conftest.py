@@ -9,23 +9,22 @@ def isolate_dashtouch_home(tmp_path, monkeypatch):
     webui.TOKEN_PATH and the fake keychain will read/write that path, so
     per-test monkeypatching of TOKEN_PATH continues to work.
     """
-    import sys
-    import types
+    import dashtouch_helper.keychain as keychain
 
     monkeypatch.setattr(webui, "URL_PATH", tmp_path / "webui-url")
     monkeypatch.setattr(webui, "LABELS_PATH", tmp_path / "labels.json")
     monkeypatch.setattr(webui, "TOKEN_PATH", tmp_path / "token")
 
-    # Create a tiny fake keychain module that reads/writes the file at
-    # webui.TOKEN_PATH. Tests that change webui.TOKEN_PATH will affect this
-    # fake keychain because it reads webui.TOKEN_PATH at call time.
-    fake_kc = types.SimpleNamespace()
-
+    # Instead of replacing the keychain module in sys.modules, directly
+    # monkeypatch the keychain functions used by the application. This is a
+    # more explicit mock and avoids messing with module resolution.
     def fake_get_session_token():
         try:
             return webui.TOKEN_PATH.read_text().strip()
         except Exception:
-            raise Exception("no token")
+            # Mirror the KeychainError semantics by raising the module's
+            # KeychainError so production code handles it the same way.
+            raise keychain.KeychainError("no token")
 
     def fake_set_session_token(token):
         webui.TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -35,8 +34,6 @@ def isolate_dashtouch_home(tmp_path, monkeypatch):
         except OSError:
             pass
 
-    fake_kc.get_session_token = fake_get_session_token
-    fake_kc.set_session_token = fake_set_session_token
-    fake_kc.KeychainError = Exception
+    monkeypatch.setattr(keychain, "get_session_token", fake_get_session_token)
+    monkeypatch.setattr(keychain, "set_session_token", fake_set_session_token)
 
-    monkeypatch.setitem(sys.modules, 'dashtouch_helper.keychain', fake_kc)
