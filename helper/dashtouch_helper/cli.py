@@ -11,6 +11,7 @@ import secrets as pysecrets
 import shutil
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 import webbrowser
@@ -49,6 +50,68 @@ def render_plist(python: str, workdir: str) -> str:
                 .replace("{logdir}", str(LOG_DIR)))
 
 
+AGENT_SERVICE = "com.dashtouch.helper"
+
+
+def _agent_domain() -> str:
+    return f"gui/{os.getuid()}"
+
+
+def agent_is_loaded() -> bool:
+    """True if the launch agent is currently registered with launchd."""
+    result = subprocess.run(["launchctl", "print", f"{_agent_domain()}/{AGENT_SERVICE}"],
+                            capture_output=True, check=False)
+    return result.returncode == 0
+
+
+def stop_agent() -> None:
+    subprocess.run(["launchctl", "bootout", f"{_agent_domain()}/{AGENT_SERVICE}"],
+                   capture_output=True, check=False)
+
+
+def start_agent() -> bool:
+    result = subprocess.run(["launchctl", "bootstrap", _agent_domain(), str(PLIST_PATH)],
+                            capture_output=True, check=False)
+    return result.returncode == 0
+
+
+def port_holders(port: str) -> list:
+    """(pid, command) for every process holding `port` open.
+
+    Returns [] when lsof isn't installed — that's "we couldn't tell", not
+    "definitely free", so callers should carry on and let the flash produce
+    its own error rather than blocking on our ignorance.
+    """
+    if not shutil.which("lsof"):
+        return []
+    result = subprocess.run(["lsof", "-t", port], capture_output=True,
+                            text=True, check=False)
+    holders = []
+    for token in result.stdout.split():
+        try:
+            pid = int(token)
+        except ValueError:
+            continue
+        ps = subprocess.run(["ps", "-p", str(pid), "-o", "command="],
+                            capture_output=True, text=True, check=False)
+        holders.append((pid, ps.stdout.strip() or "unknown"))
+    return holders
+
+
+def wait_for_port_free(port: str, timeout: float = 5.0) -> list:
+    """Poll until nothing holds `port`, returning whatever still does (empty
+    on success). `launchctl bootout` returns before the process has actually
+    exited, so checking once immediately after it is a race."""
+    deadline = time.monotonic() + timeout
+    while True:
+        holders = port_holders(port)
+        if not holders:
+            return []
+        if time.monotonic() >= deadline:
+            return holders
+        time.sleep(0.25)
+
+
 def find_and_flash(prompt_prefix: str = "") -> str:
     """Detect the board and, if found, offer to compile+upload the current
     firmware/dashtouch/ sources to it. Shared by `setup` and `pairing` so
@@ -68,7 +131,34 @@ def find_and_flash(prompt_prefix: str = "") -> str:
     ans = input(f"{prompt_prefix}Found your board at {port}. Flash the firmware now? [Y/n] ")
     if ans.strip().lower() not in ("", "y", "yes"):
         return "declined"
+
+    # The helper keeps the serial port open, so flashing on top of a running
+    # one dies with "Resource busy" — and because the launch agent sets
+    # KeepAlive, killing it just brings it back. Stop it properly, flash,
+    # then put it back exactly as we found it.
+    agent_was_loaded = agent_is_loaded()
+    if agent_was_loaded:
+        print("   Stopping the background helper so it lets go of the port...")
+        stop_agent()
+
     try:
+        holders = wait_for_port_free(port)
+        if holders:
+            print("   Something still has the serial port open:")
+            for pid, command in holders:
+                print(f"     pid {pid}  {command}")
+            print("   That's usually a `dashtouch run` in another terminal.")
+            print("   Stop it and try again.")
+            return "failed"
+
+        # Releasing the port drops DTR, which can reset the board and bring
+        # it back on a different device node. Re-detect instead of trusting
+        # the name captured before the helper let go.
+        try:
+            port = serial_link.find_port() or port
+        except serial_link.AmbiguousPortError:
+            pass
+
         subprocess.run(["arduino-cli", "compile", "--fqbn", FQBN,
                         str(REPO / "firmware" / "dashtouch")], check=True)
         subprocess.run(["arduino-cli", "upload", "--fqbn", FQBN, "-p", port,
@@ -76,6 +166,13 @@ def find_and_flash(prompt_prefix: str = "") -> str:
         return "flashed"
     except subprocess.CalledProcessError:
         return "failed"
+    finally:
+        if agent_was_loaded:
+            if start_agent():
+                print("   Background helper restarted.")
+            else:
+                print("   Couldn't restart the background helper — run:")
+                print("     dashtouch install-agent")
 
 
 def cmd_setup(args) -> int:

@@ -364,3 +364,84 @@ def test_bare_dashtouch_survives_a_corrupt_url_file(tmp_path, monkeypatch, capsy
     webui.URL_PATH.write_bytes(b"\xff\xfe")
     assert cli.cmd_where(None) == 1
     assert "isn't running" in capsys.readouterr().out
+
+
+def _flashable(monkeypatch, ports=("/dev/cu.usbmodem1",)):
+    """Common stubs so find_and_flash gets as far as the flash itself."""
+    seq = iter(ports)
+    last = [ports[-1]]
+
+    def next_port():
+        try:
+            return next(seq)
+        except StopIteration:
+            return last[0]
+
+    monkeypatch.setattr(cli.serial_link, "find_port", next_port)
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr("builtins.input", lambda *_: "y")
+
+
+def test_find_and_flash_stops_the_agent_before_flashing_and_restarts_it(monkeypatch):
+    # The launch agent holds the serial port open, so flashing over a live
+    # one fails with "Resource busy". Order matters: stop, flash, restart.
+    _flashable(monkeypatch)
+    calls = []
+    monkeypatch.setattr(cli, "agent_is_loaded", lambda: True)
+    monkeypatch.setattr(cli, "stop_agent", lambda: calls.append("stop"))
+    monkeypatch.setattr(cli, "start_agent", lambda: calls.append("start") or True)
+    monkeypatch.setattr(cli, "wait_for_port_free", lambda port, **kw: [])
+    monkeypatch.setattr(cli.subprocess, "run",
+                        lambda *a, **k: calls.append("arduino-cli"))
+
+    assert cli.find_and_flash() == "flashed"
+    assert calls == ["stop", "arduino-cli", "arduino-cli", "start"]
+
+
+def test_find_and_flash_leaves_launchd_alone_when_no_agent_installed(monkeypatch):
+    _flashable(monkeypatch)
+    touched = []
+    monkeypatch.setattr(cli, "agent_is_loaded", lambda: False)
+    monkeypatch.setattr(cli, "stop_agent", lambda: touched.append("stop"))
+    monkeypatch.setattr(cli, "start_agent", lambda: touched.append("start") or True)
+    monkeypatch.setattr(cli, "wait_for_port_free", lambda port, **kw: [])
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: None)
+
+    assert cli.find_and_flash() == "flashed"
+    assert touched == []
+
+
+def test_find_and_flash_names_whoever_still_holds_the_port(monkeypatch, capsys):
+    # A hand-started `dashtouch run` can't be stopped for the user, but
+    # naming it beats esptool's bare "Resource busy".
+    _flashable(monkeypatch)
+    monkeypatch.setattr(cli, "agent_is_loaded", lambda: True)
+    monkeypatch.setattr(cli, "stop_agent", lambda: None)
+    restarted = []
+    monkeypatch.setattr(cli, "start_agent", lambda: restarted.append(True) or True)
+    monkeypatch.setattr(cli, "wait_for_port_free",
+                        lambda port, **kw: [(4242, ".venv/bin/dashtouch run")])
+    ran = []
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: ran.append(a))
+
+    assert cli.find_and_flash() == "failed"
+    assert ran == []            # never attempted the flash
+    assert restarted == [True]  # agent still put back on the failure path
+    out = capsys.readouterr().out
+    assert "4242" in out and "dashtouch run" in out
+
+
+def test_find_and_flash_redetects_the_port_after_the_helper_lets_go(monkeypatch):
+    # Releasing the port drops DTR, which can reset the board onto a new
+    # device node. Flashing the pre-release name then hits a port that no
+    # longer exists.
+    _flashable(monkeypatch, ports=("/dev/cu.usbmodem83402", "/dev/cu.usbmodem83401"))
+    monkeypatch.setattr(cli, "agent_is_loaded", lambda: False)
+    monkeypatch.setattr(cli, "wait_for_port_free", lambda port, **kw: [])
+    captured = []
+    monkeypatch.setattr(cli.subprocess, "run", lambda a, **k: captured.append(a))
+
+    assert cli.find_and_flash() == "flashed"
+    upload = [c for c in captured if "upload" in c][0]
+    assert "/dev/cu.usbmodem83401" in upload
+    assert "/dev/cu.usbmodem83402" not in upload
