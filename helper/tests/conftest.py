@@ -34,6 +34,19 @@ def isolate_dashtouch_home(tmp_path, monkeypatch):
         except OSError:
             pass
 
+    # Wrap the existing _run to convert FileNotFoundError (missing 'security'
+    # binary on non-macOS CI runners) into KeychainError while preserving the
+    # ability for tests to patch subprocess.run and exercise normal flows.
+    orig_run = keychain._run
+
+    def safe_run(args, input_value=None, detach_tty=False):
+        try:
+            return orig_run(args, input_value=input_value, detach_tty=detach_tty)
+        except FileNotFoundError as e:
+            raise keychain.KeychainError("security not available in CI") from e
+
+    monkeypatch.setattr(keychain, "_run", safe_run)
+
     monkeypatch.setattr(keychain, "get_session_token", fake_get_session_token)
     monkeypatch.setattr(keychain, "set_session_token", fake_set_session_token)
 
