@@ -2,6 +2,12 @@
 
 **Touch ID for your Mac, without an Apple keyboard.**
 
+> Dashboard Touch is built on [tinyTouch](https://github.com/ZimengXiong/tinyTouch)
+> by **[Zimeng Xiong](https://github.com/ZimengXiong)**, which defined this entire
+> approach. This project is an extensive refactoring of that original work, and
+> shares its MIT license. If you find Dashboard Touch useful, go star tinyTouch —
+> none of this exists without it.
+
 Automatically type in your password at the tap of your finger, anywhere your Mac
 asks for it. For those of us who use our own keyboards, but miss the convenience
 and ease of Touch ID on Apple devices, Dashboard Touch lets you build your own
@@ -158,10 +164,23 @@ want to do that manually yourself, you can do that with the Arduino CLI tools.
 
 <details><summary>Flashing by hand (if setup couldn't see your board)</summary>
 
+The firmware includes `firmware/dashtouch/secrets.h`, which holds your pairing
+key. `dashtouch setup` and `dashtouch pairing` write that file right before
+flashing and delete it immediately afterward, so the key isn't left sitting on
+your disk in plaintext. That means it's normally *not* there, and a bare
+`arduino-cli compile` will stop with `secrets.h: No such file or directory`.
+
+So this is the flow when setup couldn't reach your board: run `dashtouch pairing`
+and let it fail to find the board — it writes `secrets.h` and leaves it in place
+when the flash doesn't happen. Then flash by hand:
+
 ```sh
 arduino-cli compile --fqbn esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default firmware/dashtouch
 arduino-cli upload --fqbn esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default -p $(arduino-cli board list | grep -o '/dev/cu.usbmodem[0-9]*' | head -1) firmware/dashtouch
 ```
+
+Delete `firmware/dashtouch/secrets.h` when you're done — it's a plaintext copy
+of the same key that's in your Keychain.
 
 </details>
 
