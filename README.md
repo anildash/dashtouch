@@ -127,6 +127,22 @@ do all of your key tasks:
 .venv/bin/dashtouch install-agent   # configure the helper to run in the background automatically
 ```
 
+### macOS will ask you about a keyboard
+
+The first time you plug the board in after it's wired up and flashed, macOS will
+pop open the Keyboard Setup Assistant. This is a good sign! It means your Mac has
+noticed the QT Py showing up as a USB keyboard, which is exactly what it's
+supposed to be doing.
+
+Just click **Quit** to dismiss it. The assistant is trying to work out what
+layout your new keyboard has, and it does that by asking you to press a few
+specific keys — but this "keyboard" only ever types one thing, so there's
+nothing useful to tell it. Quitting doesn't break anything and doesn't skip any
+setup step. Dashboard Touch works exactly the same afterward.
+
+You may see the assistant again if you move the board to a different USB port,
+because macOS counts that as meeting a new device. Same answer: Quit.
+
 ### Dashboard Touch helper
 
 The "helper" is a little app that stays running in the background in order to
