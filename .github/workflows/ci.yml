@@ -36,7 +36,7 @@ jobs:
       - name: Run unit tests (skip integration)
         run: |
           cd helper
-          pytest -q -m "not integration"
+          PYTHONPATH=. pytest -q -m "not integration"
 
   integration:
     name: Integration tests (slow)
@@ -69,4 +69,4 @@ jobs:
       - name: Run integration tests
         run: |
           cd helper
-          pytest -q -m integration
+          PYTHONPATH=. pytest -q -m integration
