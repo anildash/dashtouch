@@ -2,11 +2,13 @@
 
 **Touch ID for your Mac, without an Apple keyboard.**
 
-> Dashboard Touch is built on [tinyTouch](https://github.com/ZimengXiong/tinyTouch)
+> Dashboard Touch is built on the work of [tinyTouch](https://github.com/ZimengXiong/tinyTouch)
 > by **[Zimeng Xiong](https://github.com/ZimengXiong)**, which defined this entire
 > approach. This project is an extensive refactoring of that original work, and
 > shares its MIT license. If you find Dashboard Touch useful, go star tinyTouch —
-> none of this exists without it.
+> none of this exists without it. TinyTouch also supports other authentication
+> methods that Dashboard Touch doesn't, so it's worth checking out just to learn
+> what's possible!
 
 Automatically type in your password at the tap of your finger, anywhere your Mac
 asks for it. For those of us who use our own keyboards, but miss the convenience
@@ -61,6 +63,11 @@ could probably get them to work with a little bit of effort, too.
 | Microcontroller    | Adafruit QT Py ESP32-S3                   | ~$12.50      | [adafruit.com](https://www.adafruit.com/product/5426) |
 | Fingerprint sensor | Simlug R503 clone                         | ~$10–20      | [Amazon](https://amzn.to/4wnVuO9)                     |
 | USB-C cable        | Must be a _data_ cable, not just charging | you have one | [Amazon](https://amzn.to/4zjg9p9)                     |
+
+Of course, it's likely a lot of this will work with [tinyTouch](https://tinytouch.dev),
+which Zimeng Xiong is now selling as a hardware device designed to work with
+his code. You should definitely support his project! And I'm sure his
+enclosure will look really clean and elegant on any setup. 
 
 Presumably a [cheaper board](https://amzn.to/4gjkss2) could work here too. I
 haven't tested any of those other variants, but if you do and it works, please
