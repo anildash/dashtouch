@@ -120,7 +120,7 @@ def _describe_port(port) -> str:
     return f"{port.device}  {port.label}" if port.label else port.device
 
 
-def choose_port(prompt_prefix: str = ""):
+def choose_port(prompt_prefix: str = "", port_arg: str | None = None):
     """Pick the board to flash: the UsbPort, None if there's nothing to
     flash, or "declined".
 
@@ -131,6 +131,9 @@ def choose_port(prompt_prefix: str = ""):
     picks by port name, and nothing here proves what's on the other end.
     """
     ports = serial_link.usb_ports()
+    if port_arg:
+        match = [p for p in ports if p.device == port_arg]
+        return match[0] if match else serial_link.UsbPort(port_arg, "", (port_arg,))
     if not ports:
         return None
     try:
@@ -158,18 +161,18 @@ def choose_port(prompt_prefix: str = ""):
     return "declined"
 
 
-def find_and_flash(prompt_prefix: str = "") -> str:
+def find_and_flash(prompt_prefix: str = "", port_arg: str | None = None) -> str:
     """Pick the board and, if chosen, compile+upload the current
     firmware/dashtouch/ sources to it. Shared by `setup` and `pairing` so
     there's exactly one flash code path.
 
     Returns one of "flashed", "declined", "not_found", "failed".
     `prompt_prefix` is prepended to the first prompt (e.g. step numbering)
-    so each caller keeps its own voice.
+    so each caller keeps its own voice. `port_arg` skips the question.
     """
     if not shutil.which("arduino-cli"):
         return "not_found"
-    chosen = choose_port(prompt_prefix)
+    chosen = choose_port(prompt_prefix, port_arg)
     if chosen is None:
         return "not_found"
     if chosen == "declined":
@@ -247,7 +250,7 @@ def cmd_setup(args) -> int:
     print("3. Writing the key into the firmware's secrets file.")
     write_secrets(key, SECRETS_PATH)
 
-    result = find_and_flash("4. ")
+    result = find_and_flash("4. ", getattr(args, "port", None))
     if result == "flashed":
         print("   Flashed. Watch for the steady purple ring.")
     elif result == "failed":
@@ -330,7 +333,7 @@ def cmd_pairing(args) -> int:
     write_secrets(key, SECRETS_PATH)
     print("Done.\n")
 
-    result = find_and_flash("")
+    result = find_and_flash("", getattr(args, "port", None))
     if result == "flashed":
         print("\nFlashed. Watch for the steady purple ring.")
         return 0
@@ -606,7 +609,8 @@ def main() -> None:
     p.add_argument("--serial", help="board serial (default: this build's)")
     # Not required: bare `dashtouch` prints the web UI address.
     sub = p.add_subparsers(dest="cmd")
-    sub.add_parser("setup", help="first-time setup, start to finish")
+    p_setup = sub.add_parser("setup", help="first-time setup, start to finish")
+    p_setup.add_argument("--port", help="the board's serial port, if you'd rather not be asked")
     sub.add_parser("run", help="run the helper (launchd uses this)")
     sub.add_parser("enroll", help="open the enrollment page")
     sub.add_parser("doctor", help="quick health check")
@@ -614,7 +618,8 @@ def main() -> None:
     sub.add_parser("uninstall-agent", help="stop running the helper at login")
     p_password = sub.add_parser("password", help="change the password Dashboard Touch types")
     p_password.add_argument("--password", help=argparse.SUPPRESS)
-    sub.add_parser("pairing", help="rotate the pairing key (needs a reflash)")
+    p_pairing = sub.add_parser("pairing", help="rotate the pairing key (needs a reflash)")
+    p_pairing.add_argument("--port", help="the board's serial port, if you'd rather not be asked")
     p_pins = sub.add_parser("pins", help="check or change the sensor's TX/RX pin orientation")
     p_pins.add_argument("--swap", action="store_true",
                         help="swap the sensor UART pins (for boards that can't transmit on the default one)")

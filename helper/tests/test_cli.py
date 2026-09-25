@@ -545,6 +545,14 @@ def test_find_and_flash_gives_up_quietly_when_input_ends(monkeypatch):
     assert captured == []
 
 
+def test_find_and_flash_takes_a_port_without_asking(monkeypatch):
+    _flashable(monkeypatch, listings=(("/dev/cu.usbmodemA", "/dev/cu.usbmodemB"),),
+               answers=())
+    captured = _flash_stubs(monkeypatch)
+    assert cli.find_and_flash(port_arg="/dev/cu.usbmodemA") == "flashed"
+    assert _uploaded_to(captured) == "/dev/cu.usbmodemA"
+
+
 def test_find_and_flash_with_nothing_plugged_in(monkeypatch):
     _flashable(monkeypatch, listings=((),))
     assert cli.find_and_flash() == "not_found"
