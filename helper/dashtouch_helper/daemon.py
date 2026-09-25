@@ -65,7 +65,10 @@ class Daemon:
                       # Mirrors the firmware's transient PAUSE state (see
                       # docs/protocol.md). Updated from PAUSE_OK replies and
                       # STATUS_OK's paused= field; never persisted.
-                      "paused": False}
+                      "paused": False,
+                      # Why the board can't be picked out, while that's the
+                      # case (currently: several usbmodem ports at once).
+                      "port_problem": None}
 
     # -- connection lifecycle -----------------------------------------------
     def _on_connect(self) -> None:
@@ -297,7 +300,9 @@ class Daemon:
             "label": "Device",
             "ok": connected,
             "state": "ok" if connected else "bad",
-            "detail": "Connected" if connected else "Not connected",
+            "detail": "Connected" if connected
+                      else "More than one board is plugged in" if self.state["port_problem"]
+                      else "Not connected",
             "fix": "help-not-connected",
         })
 
@@ -396,7 +401,21 @@ class Daemon:
             print(f"web UI: {origin}")
             print(f"(the full link, with your session token, is in {webui.URL_PATH})")
         while True:
-            port = self.port or serial_link.find_port()
+            try:
+                port = self.port or serial_link.find_port()
+            except serial_link.AmbiguousPortError as e:
+                # Letting this escape crash-looped the helper under
+                # launchd's KeepAlive until someone unplugged a board. Wait
+                # it out like any other absence, and say why once rather
+                # than every second.
+                if self.state["port_problem"] != str(e):
+                    msg = f"{e} — unplug the one that isn't Dashboard Touch"
+                    print(msg, file=sys.stderr)
+                    self.log_event("helper", msg)
+                self.state["port_problem"] = str(e)
+                port = None
+            else:
+                self.state["port_problem"] = None
             if port is None:
                 self.state["connected"] = False
                 time.sleep(1.0)

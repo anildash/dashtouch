@@ -752,3 +752,46 @@ def test_health_picks_up_a_repaired_keychain_without_a_restart():
         rows = {r["id"]: r for r in d.health()}
     assert rows["pairing"]["state"] == "ok"
     assert rows["password"]["state"] == "ok"
+
+
+def test_run_forever_waits_out_several_boards_instead_of_crashing(monkeypatch, capsys):
+    # With two usbmodem ports, find_port() raised straight out of
+    # run_forever: under launchd's KeepAlive, a crash-loop until a board was
+    # unplugged. The helper must keep looking, and connect once it can.
+    d = make_daemon()
+    monkeypatch.setattr(daemon.webui, "start", lambda self: "http://127.0.0.1:3274/?token=T")
+    found = iter([daemon.serial_link.AmbiguousPortError("several boards found: [a, b]")] * 3
+                 + ["/dev/fake"])
+
+    def find_port():
+        r = next(found)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+    monkeypatch.setattr(daemon.serial_link, "find_port", find_port)
+    monkeypatch.setattr(daemon.time, "sleep", lambda s: None)
+    opened = []
+    monkeypatch.setattr(daemon.serial_link, "open_port",
+                        lambda port: opened.append(port) or mock.Mock())
+
+    def stop(ser):
+        raise RuntimeError("stop test loop")
+
+    monkeypatch.setattr(daemon.serial_link, "read_line", stop)
+    with pytest.raises(RuntimeError, match="stop test loop"):
+        d.run_forever()
+    assert opened == ["/dev/fake"]
+    assert d.state["port_problem"] is None
+    # Said once, not once per retry.
+    said = [e for e in d.events if "several boards found" in e["text"]]
+    assert len(said) == 1
+    assert capsys.readouterr().err.count("several boards found") == 1
+
+
+def test_health_says_when_several_boards_are_the_reason():
+    d = make_daemon()
+    d.state["port_problem"] = "several boards found: [a, b]"
+    rows = {r["id"]: r for r in d.health()}
+    assert rows["device"]["state"] == "bad"
+    assert rows["device"]["detail"] == "More than one board is plugged in"
