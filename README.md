@@ -182,9 +182,13 @@ and let it fail to find the board — it writes `secrets.h` and leaves it in pla
 when the flash doesn't happen. Then flash by hand:
 
 ```sh
+arduino-cli board list   # find your board's port, e.g. /dev/cu.usbmodem1402
 arduino-cli compile --fqbn esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default firmware/dashtouch
-arduino-cli upload --fqbn esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default -p $(arduino-cli board list | grep -o '/dev/cu.usbmodem[0-9]*' | head -1) firmware/dashtouch
+arduino-cli upload --fqbn esp32:esp32:adafruit_qtpy_esp32s3_nopsram:CDCOnBoot=cdc,USBMode=default -p <your board's port> firmware/dashtouch
 ```
+
+Check the port carefully if anything else is plugged in over USB — upload
+will overwrite whatever board is on it.
 
 Delete `firmware/dashtouch/secrets.h` when you're done — it's a plaintext copy
 of the same key that's in your Keychain.
