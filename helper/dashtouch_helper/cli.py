@@ -196,12 +196,12 @@ def find_and_flash(prompt_prefix: str = "") -> str:
             return "failed"
 
         # Releasing the port drops DTR, which can reset the board and bring
-        # it back on a different device node. Re-detect instead of trusting
-        # the name captured before the helper let go.
-        try:
-            port = serial_link.find_port() or port
-        except serial_link.AmbiguousPortError:
-            pass
+        # it back on a different device node. Look it up again by identity
+        # instead of trusting the name captured before the helper let go.
+        for p in serial_link.usb_ports():
+            if p.identity == chosen.identity:
+                port = p.device
+                break
 
         subprocess.run(["arduino-cli", "compile", "--fqbn", FQBN,
                         str(REPO / "firmware" / "dashtouch")], check=True)

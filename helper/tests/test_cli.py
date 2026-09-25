@@ -380,19 +380,8 @@ def _flashable(monkeypatch, listings=(("/dev/cu.usbmodem1",),), answers=("y",),
     """
     seq = [[usb(d) if isinstance(d, str) else d for d in ports] for ports in listings]
     calls = iter(range(10**6))
-
-    def usb_ports():
-        return seq[min(next(calls), len(seq) - 1)]
-
-    def find_port():
-        # Same rules as the real one, over the same listings.
-        ports = usb_ports()
-        if len(ports) > 1:
-            raise cli.serial_link.AmbiguousPortError(ports)
-        return ports[0].device if ports else None
-
-    monkeypatch.setattr(cli.serial_link, "usb_ports", usb_ports)
-    monkeypatch.setattr(cli.serial_link, "find_port", find_port)
+    monkeypatch.setattr(cli.serial_link, "usb_ports",
+                        lambda: seq[min(next(calls), len(seq) - 1)])
     monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/" + name)
     replies = iter(answers)
     prompts = []
@@ -474,6 +463,24 @@ def test_find_and_flash_redetects_the_port_after_the_helper_lets_go(monkeypatch)
     upload = [c for c in captured if "upload" in c][0]
     assert "/dev/cu.usbmodem83401" in upload
     assert "/dev/cu.usbmodem83402" not in upload
+
+
+def test_find_and_flash_redetects_the_port_with_another_board_plugged_in(monkeypatch):
+    # Re-detecting by "the only usbmodem port" gave up when there were two,
+    # and flashed the stale name. Identity finds the same board regardless.
+    board = "68:ee:8f"
+    other = usb("/dev/cu.usbmodem1234562", identity=("123456",))
+    _flashable(monkeypatch, listings=(
+        (usb("/dev/cu.usbmodem83402", identity=(board,)), other),
+        (other, usb("/dev/cu.usbmodem83401", identity=(board,)))),
+        answers=("1",))
+    monkeypatch.setattr(cli, "agent_is_loaded", lambda: False)
+    monkeypatch.setattr(cli, "wait_for_port_free", lambda port, **kw: [])
+    captured = []
+    monkeypatch.setattr(cli.subprocess, "run", lambda a, **k: captured.append(a))
+
+    assert cli.find_and_flash() == "flashed"
+    assert _uploaded_to(captured) == "/dev/cu.usbmodem83401"
 
 
 def _uploaded_to(captured):
