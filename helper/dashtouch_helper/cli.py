@@ -112,25 +112,72 @@ def wait_for_port_free(port: str, timeout: float = 5.0) -> list:
         time.sleep(0.25)
 
 
-def find_and_flash(prompt_prefix: str = "") -> str:
-    """Detect the board and, if found, offer to compile+upload the current
+def _helper_holds(port: str) -> bool:
+    return any("dashtouch" in command for _, command in port_holders(port))
+
+
+def _describe_port(port) -> str:
+    return f"{port.device}  {port.label}" if port.label else port.device
+
+
+def choose_port(prompt_prefix: str = "", port_arg: str | None = None):
+    """Pick the board to flash: the UsbPort, None if there's nothing to
+    flash, or "declined".
+
+    Before it's flashed, a dashtouch is just some board, so with more than
+    one plugged in the only reliable answer is the person's. The one the
+    helper already holds is the likeliest answer, so it's the default — a
+    reflash is then one keypress — but it's only a default: the helper
+    picks by port name, and nothing here proves what's on the other end.
+    """
+    ports = serial_link.usb_ports()
+    if port_arg:
+        match = [p for p in ports if p.device == port_arg]
+        return match[0] if match else serial_link.UsbPort(port_arg, "", (port_arg,))
+    if not ports:
+        return None
+    try:
+        if len(ports) == 1:
+            ans = input(f"{prompt_prefix}Found a board at {_describe_port(ports[0])}. "
+                        "Flash the firmware now? [Y/n] ")
+            return ports[0] if ans.strip().lower() in ("", "y", "yes") else "declined"
+
+        held = [i for i, p in enumerate(ports) if _helper_holds(p.device)]
+        default = held[0] + 1 if held else None
+        print(f"{prompt_prefix}More than one USB device is plugged in:")
+        for i, p in enumerate(ports, 1):
+            note = "   <- the helper is connected to this one" if i == default else ""
+            print(f"     {i}) {_describe_port(p)}{note}")
+        hint = f"[{default}]" if default else "(Enter to skip)"
+        for _ in range(3):
+            ans = input(f"   Which one should get the Dashboard Touch firmware? {hint} ").strip()
+            if not ans:
+                return ports[default - 1] if default else "declined"
+            if ans.isdigit() and 1 <= int(ans) <= len(ports):
+                return ports[int(ans) - 1]
+            print(f"   Pick a number from 1 to {len(ports)}.")
+    except EOFError:
+        pass
+    return "declined"
+
+
+def find_and_flash(prompt_prefix: str = "", port_arg: str | None = None) -> str:
+    """Pick the board and, if chosen, compile+upload the current
     firmware/dashtouch/ sources to it. Shared by `setup` and `pairing` so
     there's exactly one flash code path.
 
     Returns one of "flashed", "declined", "not_found", "failed".
-    `prompt_prefix` is prepended to the confirmation prompt (e.g. step
-    numbering) so each caller keeps its own voice.
+    `prompt_prefix` is prepended to the first prompt (e.g. step numbering)
+    so each caller keeps its own voice. `port_arg` skips the question.
     """
-    port = None
-    try:
-        port = serial_link.find_port()
-    except serial_link.AmbiguousPortError as e:
-        print(f"   Heads up: {e}")
-    if not (port and shutil.which("arduino-cli")):
+    if not shutil.which("arduino-cli"):
         return "not_found"
-    ans = input(f"{prompt_prefix}Found your board at {port}. Flash the firmware now? [Y/n] ")
-    if ans.strip().lower() not in ("", "y", "yes"):
+    chosen = choose_port(prompt_prefix, port_arg)
+    if chosen is None:
+        return "not_found"
+    if chosen == "declined":
         return "declined"
+    port = chosen.device
 
     # The helper keeps the serial port open, so flashing on top of a running
     # one dies with "Resource busy" — and because the launch agent sets
@@ -152,12 +199,12 @@ def find_and_flash(prompt_prefix: str = "") -> str:
             return "failed"
 
         # Releasing the port drops DTR, which can reset the board and bring
-        # it back on a different device node. Re-detect instead of trusting
-        # the name captured before the helper let go.
-        try:
-            port = serial_link.find_port() or port
-        except serial_link.AmbiguousPortError:
-            pass
+        # it back on a different device node. Look it up again by identity
+        # instead of trusting the name captured before the helper let go.
+        for p in serial_link.usb_ports():
+            if p.identity == chosen.identity:
+                port = p.device
+                break
 
         subprocess.run(["arduino-cli", "compile", "--fqbn", FQBN,
                         str(REPO / "firmware" / "dashtouch")], check=True)
@@ -203,7 +250,7 @@ def cmd_setup(args) -> int:
     print("3. Writing the key into the firmware's secrets file.")
     write_secrets(key, SECRETS_PATH)
 
-    result = find_and_flash("4. ")
+    result = find_and_flash("4. ", getattr(args, "port", None))
     if result == "flashed":
         print("   Flashed. Watch for the steady purple ring.")
     elif result == "failed":
@@ -286,7 +333,7 @@ def cmd_pairing(args) -> int:
     write_secrets(key, SECRETS_PATH)
     print("Done.\n")
 
-    result = find_and_flash("")
+    result = find_and_flash("", getattr(args, "port", None))
     if result == "flashed":
         print("\nFlashed. Watch for the steady purple ring.")
         return 0
@@ -562,7 +609,8 @@ def main() -> None:
     p.add_argument("--serial", help="board serial (default: this build's)")
     # Not required: bare `dashtouch` prints the web UI address.
     sub = p.add_subparsers(dest="cmd")
-    sub.add_parser("setup", help="first-time setup, start to finish")
+    p_setup = sub.add_parser("setup", help="first-time setup, start to finish")
+    p_setup.add_argument("--port", help="the board's serial port, if you'd rather not be asked")
     sub.add_parser("run", help="run the helper (launchd uses this)")
     sub.add_parser("enroll", help="open the enrollment page")
     sub.add_parser("doctor", help="quick health check")
@@ -570,7 +618,8 @@ def main() -> None:
     sub.add_parser("uninstall-agent", help="stop running the helper at login")
     p_password = sub.add_parser("password", help="change the password Dashboard Touch types")
     p_password.add_argument("--password", help=argparse.SUPPRESS)
-    sub.add_parser("pairing", help="rotate the pairing key (needs a reflash)")
+    p_pairing = sub.add_parser("pairing", help="rotate the pairing key (needs a reflash)")
+    p_pairing.add_argument("--port", help="the board's serial port, if you'd rather not be asked")
     p_pins = sub.add_parser("pins", help="check or change the sensor's TX/RX pin orientation")
     p_pins.add_argument("--swap", action="store_true",
                         help="swap the sensor UART pins (for boards that can't transmit on the default one)")

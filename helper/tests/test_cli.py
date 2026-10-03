@@ -133,7 +133,8 @@ def test_pairing_does_not_flash_when_declined(tmp_path, monkeypatch):
     answers = iter(["y", "n"])
     monkeypatch.setattr("builtins.input", lambda *_: next(answers))
     monkeypatch.setattr(cli.keychain, "set_pairing_key", mock.Mock())
-    monkeypatch.setattr(cli.serial_link, "find_port", lambda: "/dev/cu.usbmodem1")
+    monkeypatch.setattr(cli.serial_link, "usb_ports",
+                        lambda: [usb("/dev/cu.usbmodem1")])
     monkeypatch.setattr(cli.shutil, "which", lambda _: "/usr/local/bin/arduino-cli")
     run = mock.Mock()
     monkeypatch.setattr(cli.subprocess, "run", run)
@@ -366,20 +367,34 @@ def test_bare_dashtouch_survives_a_corrupt_url_file(tmp_path, monkeypatch, capsy
     assert "isn't running" in capsys.readouterr().out
 
 
-def _flashable(monkeypatch, ports=("/dev/cu.usbmodem1",)):
-    """Common stubs so find_and_flash gets as far as the flash itself."""
-    seq = iter(ports)
-    last = [ports[-1]]
+def usb(device, label="", identity=None):
+    return cli.serial_link.UsbPort(device, label, identity or (device,))
 
-    def next_port():
-        try:
-            return next(seq)
-        except StopIteration:
-            return last[0]
 
-    monkeypatch.setattr(cli.serial_link, "find_port", next_port)
+def _flashable(monkeypatch, listings=(("/dev/cu.usbmodem1",),), answers=("y",),
+               helper_on=None):
+    """Common stubs so find_and_flash gets as far as the flash itself.
+
+    `listings` is what successive usb_ports() calls see; the last one
+    repeats. `helper_on` is the device the running helper holds, if any.
+    """
+    seq = [[usb(d) if isinstance(d, str) else d for d in ports] for ports in listings]
+    calls = iter(range(10**6))
+    monkeypatch.setattr(cli.serial_link, "usb_ports",
+                        lambda: seq[min(next(calls), len(seq) - 1)])
     monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/" + name)
-    monkeypatch.setattr("builtins.input", lambda *_: "y")
+    replies = iter(answers)
+    prompts = []
+
+    def fake_input(prompt=""):
+        prompts.append(prompt)
+        return next(replies)
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    monkeypatch.setattr(cli, "port_holders",
+                        lambda port: [(1, "python -m dashtouch_helper.daemon")]
+                        if port == helper_on else [])
+    return prompts
 
 
 def test_find_and_flash_stops_the_agent_before_flashing_and_restarts_it(monkeypatch):
@@ -435,7 +450,10 @@ def test_find_and_flash_redetects_the_port_after_the_helper_lets_go(monkeypatch)
     # Releasing the port drops DTR, which can reset the board onto a new
     # device node. Flashing the pre-release name then hits a port that no
     # longer exists.
-    _flashable(monkeypatch, ports=("/dev/cu.usbmodem83402", "/dev/cu.usbmodem83401"))
+    board = "68:ee:8f"
+    _flashable(monkeypatch, listings=(
+        (usb("/dev/cu.usbmodem83402", identity=(board,)),),
+        (usb("/dev/cu.usbmodem83401", identity=(board,)),)))
     monkeypatch.setattr(cli, "agent_is_loaded", lambda: False)
     monkeypatch.setattr(cli, "wait_for_port_free", lambda port, **kw: [])
     captured = []
@@ -445,3 +463,97 @@ def test_find_and_flash_redetects_the_port_after_the_helper_lets_go(monkeypatch)
     upload = [c for c in captured if "upload" in c][0]
     assert "/dev/cu.usbmodem83401" in upload
     assert "/dev/cu.usbmodem83402" not in upload
+
+
+def test_find_and_flash_redetects_the_port_with_another_board_plugged_in(monkeypatch):
+    # Re-detecting by "the only usbmodem port" gave up when there were two,
+    # and flashed the stale name. Identity finds the same board regardless.
+    board = "68:ee:8f"
+    other = usb("/dev/cu.usbmodem1234562", identity=("123456",))
+    _flashable(monkeypatch, listings=(
+        (usb("/dev/cu.usbmodem83402", identity=(board,)), other),
+        (other, usb("/dev/cu.usbmodem83401", identity=(board,)))),
+        answers=("1",))
+    monkeypatch.setattr(cli, "agent_is_loaded", lambda: False)
+    monkeypatch.setattr(cli, "wait_for_port_free", lambda port, **kw: [])
+    captured = []
+    monkeypatch.setattr(cli.subprocess, "run", lambda a, **k: captured.append(a))
+
+    assert cli.find_and_flash() == "flashed"
+    assert _uploaded_to(captured) == "/dev/cu.usbmodem83401"
+
+
+def _uploaded_to(captured):
+    upload = [c for c in captured if "upload" in c][0]
+    return upload[upload.index("-p") + 1]
+
+
+def _flash_stubs(monkeypatch):
+    monkeypatch.setattr(cli, "agent_is_loaded", lambda: False)
+    monkeypatch.setattr(cli, "wait_for_port_free", lambda port, **kw: [])
+    captured = []
+    monkeypatch.setattr(cli.subprocess, "run", lambda a, **k: captured.append(a))
+    return captured
+
+
+def test_find_and_flash_asks_which_board_when_several_are_plugged_in(monkeypatch, capsys):
+    # Nothing tells a not-yet-flashed dashtouch from any other board, so
+    # with more than one plugged in the person picks.
+    _flashable(monkeypatch, listings=(("/dev/cu.usbmodemA", "/dev/cu.usbmodemB"),),
+               answers=("2",))
+    captured = _flash_stubs(monkeypatch)
+    assert cli.find_and_flash() == "flashed"
+    assert _uploaded_to(captured) == "/dev/cu.usbmodemB"
+    out = capsys.readouterr().out
+    assert "1) /dev/cu.usbmodemA" in out and "2) /dev/cu.usbmodemB" in out
+
+
+def test_find_and_flash_defaults_to_the_board_the_helper_is_using(monkeypatch, capsys):
+    # The helper only holds a port whose board answered HELLO, so a reflash
+    # is one keypress.
+    _flashable(monkeypatch, listings=(("/dev/cu.usbmodemA", "/dev/cu.usbmodemB"),),
+               answers=("",), helper_on="/dev/cu.usbmodemB")
+    captured = _flash_stubs(monkeypatch)
+    assert cli.find_and_flash() == "flashed"
+    assert _uploaded_to(captured) == "/dev/cu.usbmodemB"
+    assert "helper is connected to this one" in capsys.readouterr().out
+
+
+def test_find_and_flash_with_no_obvious_choice_skips_on_enter(monkeypatch):
+    _flashable(monkeypatch, listings=(("/dev/cu.usbmodemA", "/dev/cu.usbmodemB"),),
+               answers=("",))
+    captured = _flash_stubs(monkeypatch)
+    assert cli.find_and_flash() == "declined"
+    assert captured == []
+
+
+def test_find_and_flash_reasks_on_a_bad_choice(monkeypatch):
+    prompts = _flashable(monkeypatch,
+                         listings=(("/dev/cu.usbmodemA", "/dev/cu.usbmodemB"),),
+                         answers=("7", "banana", "1"))
+    captured = _flash_stubs(monkeypatch)
+    assert cli.find_and_flash() == "flashed"
+    assert _uploaded_to(captured) == "/dev/cu.usbmodemA"
+    assert len(prompts) == 3
+
+
+def test_find_and_flash_gives_up_quietly_when_input_ends(monkeypatch):
+    _flashable(monkeypatch, listings=(("/dev/cu.usbmodemA", "/dev/cu.usbmodemB"),))
+    monkeypatch.setattr("builtins.input", mock.Mock(side_effect=EOFError))
+    captured = _flash_stubs(monkeypatch)
+    assert cli.find_and_flash() == "declined"
+    assert captured == []
+
+
+def test_find_and_flash_takes_a_port_without_asking(monkeypatch):
+    _flashable(monkeypatch, listings=(("/dev/cu.usbmodemA", "/dev/cu.usbmodemB"),),
+               answers=())
+    captured = _flash_stubs(monkeypatch)
+    assert cli.find_and_flash(port_arg="/dev/cu.usbmodemA") == "flashed"
+    assert _uploaded_to(captured) == "/dev/cu.usbmodemA"
+
+
+def test_find_and_flash_with_nothing_plugged_in(monkeypatch):
+    _flashable(monkeypatch, listings=((),))
+    assert cli.find_and_flash() == "not_found"
+
