@@ -283,6 +283,11 @@ Dashboard Touch is an extensive refactoring of
 defined this entire approach. It shares the same MIT license as the project
 which inspired it.
 
+Thanks to [Evan Siegel](https://github.com/vanev) for the first contributions
+here: [asking which board to flash](https://github.com/anildash/dashtouch/pull/4)
+when several are plugged in, and [fixing a crash loop](https://github.com/anildash/dashtouch/pull/5)
+in the helper when there's more than one.
+
 The protocol is documented in [docs/protocol.md](docs/protocol.md), and this is
 my first attempt at sharing any of the code I've made for a hardware project, so
 improvements, feedback, comments and pull requests are very welcome!
