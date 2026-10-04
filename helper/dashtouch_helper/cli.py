@@ -3,14 +3,17 @@ the product."""
 from __future__ import annotations
 
 import argparse
+import contextlib
 import getpass
 import json
 import os
 import pathlib
+import platform
 import secrets as pysecrets
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -27,6 +30,41 @@ PLIST_PATH = pathlib.Path.home() / "Library" / "LaunchAgents" / "com.dashtouch.h
 # helper (which includes the web UI's origin) lives under the user's own
 # Library, same as the plist itself.
 LOG_DIR = pathlib.Path.home() / "Library" / "Logs" / "dashtouch"
+
+
+def _can_run_x86() -> bool:
+    """False on an Apple Silicon Mac without Rosetta, where x86 binaries die
+    with "Bad CPU type in executable"."""
+    if platform.machine() != "arm64":
+        return True
+    try:
+        return subprocess.run(["arch", "-x86_64", "/usr/bin/true"],
+                              capture_output=True).returncode == 0
+    except OSError:
+        return True
+
+
+@contextlib.contextmanager
+def ctags_workaround():
+    """Yield extra `arduino-cli compile` args that keep builds working
+    without Rosetta.
+
+    arduino-cli's bundled ctags (builtin/tools/ctags) is x86-only and has no
+    arm64 build, so every compile dies on an Apple Silicon Mac that lacks
+    Rosetta. ctags only generates function prototypes for .ino files, and
+    dashtouch.ino defines every function before using it, so an empty ctags
+    is enough. Pointing just this compile at one leaves the shared
+    ~/Library/Arduino15 install alone for a builder's other boards. Don't
+    rely on forward references in dashtouch.ino.
+    """
+    if _can_run_x86():
+        yield []
+        return
+    with tempfile.TemporaryDirectory(prefix="dashtouch-noctags-") as d:
+        stub = pathlib.Path(d) / "ctags"
+        stub.write_text("#!/bin/sh\nexit 0\n")
+        stub.chmod(0o755)
+        yield ["--build-property", f"runtime.tools.ctags.path={d}"]
 
 
 def write_secrets(key: bytes, path: pathlib.Path) -> None:
@@ -206,8 +244,9 @@ def find_and_flash(prompt_prefix: str = "", port_arg: str | None = None) -> str:
                 port = p.device
                 break
 
-        subprocess.run(["arduino-cli", "compile", "--fqbn", FQBN,
-                        str(REPO / "firmware" / "dashtouch")], check=True)
+        with ctags_workaround() as extra:
+            subprocess.run(["arduino-cli", "compile", "--fqbn", FQBN, *extra,
+                            str(REPO / "firmware" / "dashtouch")], check=True)
         subprocess.run(["arduino-cli", "upload", "--fqbn", FQBN, "-p", port,
                         str(REPO / "firmware" / "dashtouch")], check=True)
         # Erase the plaintext secrets file on the Mac now that flashing

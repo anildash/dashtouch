@@ -1,5 +1,6 @@
 import argparse
 import pathlib
+import tempfile
 from unittest import mock
 
 from dashtouch_helper import cli
@@ -383,6 +384,10 @@ def _flashable(monkeypatch, listings=(("/dev/cu.usbmodem1",),), answers=("y",),
     monkeypatch.setattr(cli.serial_link, "usb_ports",
                         lambda: seq[min(next(calls), len(seq) - 1)])
     monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(cli, "_can_run_x86", lambda: True)
+    # A successful flash erases SECRETS_PATH; never let that be the real one.
+    monkeypatch.setattr(cli, "SECRETS_PATH",
+                        pathlib.Path(tempfile.mkdtemp()) / "secrets.h")
     replies = iter(answers)
     prompts = []
 
@@ -557,3 +562,23 @@ def test_find_and_flash_with_nothing_plugged_in(monkeypatch):
     _flashable(monkeypatch, listings=((),))
     assert cli.find_and_flash() == "not_found"
 
+
+def test_ctags_workaround_is_a_no_op_when_x86_binaries_run(monkeypatch):
+    monkeypatch.setattr(cli, "_can_run_x86", lambda: True)
+    with cli.ctags_workaround() as extra:
+        assert extra == []
+
+
+def test_ctags_workaround_swaps_in_an_empty_ctags_without_rosetta(monkeypatch):
+    # arduino-cli's bundled ctags is x86-only; without Rosetta every compile
+    # dies with "Bad CPU type in executable". An empty ctags is enough
+    # because dashtouch.ino never relies on generated prototypes.
+    monkeypatch.setattr(cli, "_can_run_x86", lambda: False)
+    with cli.ctags_workaround() as extra:
+        assert extra[0] == "--build-property"
+        key, _, d = extra[1].partition("=")
+        assert key == "runtime.tools.ctags.path"
+        stub = pathlib.Path(d) / "ctags"
+        assert stub.stat().st_mode & 0o111
+        assert stub.read_text().endswith("exit 0\n")
+    assert not pathlib.Path(d).exists()
