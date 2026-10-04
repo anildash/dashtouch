@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import getpass
+import html
 import json
 import os
 import pathlib
@@ -81,11 +82,14 @@ def write_secrets(key: bytes, path: pathlib.Path) -> None:
     path.chmod(0o600)
 
 
-def render_plist(python: str, workdir: str) -> str:
+def render_plist(python: str, workdir: str, port: str | None = None) -> str:
     tmpl = (pathlib.Path(__file__).parent / "launchd_template.plist").read_text()
+    extra_env = (f"<key>{daemon_mod.PORT_ENV}</key><string>{html.escape(port)}</string>"
+                 if port else "")
     return (tmpl.replace("{python}", python)
                 .replace("{workdir}", workdir)
-                .replace("{logdir}", str(LOG_DIR)))
+                .replace("{logdir}", str(LOG_DIR))
+                .replace("{extra_env}", extra_env))
 
 
 AGENT_SERVICE = "com.dashtouch.helper"
@@ -394,7 +398,8 @@ def cmd_pairing(args) -> int:
 
 
 def cmd_run(args) -> int:
-    daemon_mod.main(args.serial or daemon_mod.DEFAULT_SERIAL)
+    daemon_mod.main(args.serial or daemon_mod.DEFAULT_SERIAL,
+                    getattr(args, "port", None))
     return 0
 
 
@@ -583,7 +588,8 @@ def cmd_install_agent(args) -> int:
     """Install the helper as a launch agent using the modern launchctl API."""
     PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    PLIST_PATH.write_text(render_plist(sys.executable, str(REPO)))
+    PLIST_PATH.write_text(render_plist(sys.executable, str(REPO),
+                                       getattr(args, "port", None)))
 
     uid = os.getuid()
     domain = f"gui/{uid}"
@@ -650,10 +656,13 @@ def main() -> None:
     sub = p.add_subparsers(dest="cmd")
     p_setup = sub.add_parser("setup", help="first-time setup, start to finish")
     p_setup.add_argument("--port", help="the board's serial port, if you'd rather not be asked")
-    sub.add_parser("run", help="run the helper (launchd uses this)")
+    p_run = sub.add_parser("run", help="run the helper (launchd uses this)")
+    p_run.add_argument("--port", help="only talk to this serial port, e.g. /dev/cu.usbmodem1101 "
+                                      "(use when other USB serial devices are plugged in)")
     sub.add_parser("enroll", help="open the enrollment page")
     sub.add_parser("doctor", help="quick health check")
-    sub.add_parser("install-agent", help="run the helper automatically at login")
+    p_agent = sub.add_parser("install-agent", help="run the helper automatically at login")
+    p_agent.add_argument("--port", help="only talk to this serial port, e.g. /dev/cu.usbmodem1101")
     sub.add_parser("uninstall-agent", help="stop running the helper at login")
     p_password = sub.add_parser("password", help="change the password Dashboard Touch types")
     p_password.add_argument("--password", help=argparse.SUPPRESS)

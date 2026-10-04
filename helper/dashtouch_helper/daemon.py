@@ -5,6 +5,7 @@ this process, never to the port directly.
 """
 from __future__ import annotations
 
+import os
 import pathlib
 import sys
 import threading
@@ -403,6 +404,11 @@ class Daemon:
         while True:
             try:
                 port = self.port or serial_link.find_port()
+                if self.port and not pathlib.Path(self.port).exists():
+                    # Pinned to a port that isn't there (board unplugged).
+                    # Wait quietly, like an absent board, rather than
+                    # failing to open it and logging every second.
+                    port = None
             except serial_link.AmbiguousPortError as e:
                 # Letting this escape crash-looped the helper under
                 # launchd's KeepAlive until someone unplugged a board. Wait
@@ -454,8 +460,13 @@ class Daemon:
                 time.sleep(1.0)
 
 
-def main(serial_number: str = DEFAULT_SERIAL) -> None:
-    Daemon(serial_number).run_forever()
+PORT_ENV = "DASHTOUCH_SERIAL_PORT"
+
+
+def main(serial_number: str = DEFAULT_SERIAL, port: str | None = None) -> None:
+    """`port` pins the helper to one serial port; otherwise $DASHTOUCH_SERIAL_PORT
+    (what the launch agent sets), otherwise it finds the board itself."""
+    Daemon(serial_number, port or os.environ.get(PORT_ENV, "").strip() or None).run_forever()
 
 
 if __name__ == "__main__":

@@ -795,3 +795,36 @@ def test_health_says_when_several_boards_are_the_reason():
     rows = {r["id"]: r for r in d.health()}
     assert rows["device"]["state"] == "bad"
     assert rows["device"]["detail"] == "More than one board is plugged in"
+
+
+def _main_port(monkeypatch, env=None, arg=None):
+    seen = []
+
+    class Fake:
+        def __init__(self, serial, port=None):
+            seen.append(port)
+
+        def run_forever(self):
+            pass
+
+    monkeypatch.setattr(daemon, "Daemon", Fake)
+    monkeypatch.delenv(daemon.PORT_ENV, raising=False)
+    if env is not None:
+        monkeypatch.setenv(daemon.PORT_ENV, env)
+    daemon.main("SER1", arg)
+    return seen[0]
+
+
+def test_main_uses_the_port_from_the_environment(monkeypatch):
+    # The launch agent can't take arguments, so install-agent --port sets
+    # this variable in the plist.
+    assert _main_port(monkeypatch, env="/dev/cu.usbmodem1101") == "/dev/cu.usbmodem1101"
+
+
+def test_main_prefers_an_explicit_port_over_the_environment(monkeypatch):
+    assert _main_port(monkeypatch, env="/dev/cu.a", arg="/dev/cu.b") == "/dev/cu.b"
+
+
+def test_main_finds_the_board_itself_when_nothing_is_pinned(monkeypatch):
+    assert _main_port(monkeypatch) is None
+    assert _main_port(monkeypatch, env="  ") is None

@@ -81,8 +81,19 @@ step the first time, or flash by hand with the commands it prints.
 
 ## "More than one board is plugged in"
 
-Unplug the one that isn't Dashboard Touch, or pass
-`.venv/bin/dashtouch --serial <which>` if you actually run two.
+Other USB serial devices (`/dev/cu.usbmodem*`) make the helper unsure which
+one is Dashboard Touch. Unplug the others, or tell the helper which port is
+yours. Find it with `ls /dev/cu.usbmodem*` (unplug yours and run it again —
+the one that disappears is it), then:
+
+```bash
+.venv/bin/dashtouch run --port /dev/cu.usbmodem1101
+.venv/bin/dashtouch install-agent --port /dev/cu.usbmodem1101   # for the login item
+```
+
+The name can change if you move the board to another USB port, in which case
+run `install-agent --port` again with the new one. If you actually run two
+Dashboard Touch boards, pass `.venv/bin/dashtouch --serial <which>`.
 
 ## Still stuck?
 

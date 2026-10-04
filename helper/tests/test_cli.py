@@ -582,3 +582,26 @@ def test_ctags_workaround_swaps_in_an_empty_ctags_without_rosetta(monkeypatch):
         assert stub.stat().st_mode & 0o111
         assert stub.read_text().endswith("exit 0\n")
     assert not pathlib.Path(d).exists()
+
+
+def test_render_plist_pins_the_serial_port_when_given():
+    out = cli.render_plist("/usr/bin/python3", "/tmp/wd", "/dev/cu.usbmodem1101")
+    assert "<key>DASHTOUCH_SERIAL_PORT</key>" in out
+    assert "<string>/dev/cu.usbmodem1101</string>" in out
+
+
+def test_render_plist_has_no_port_pin_by_default():
+    assert "DASHTOUCH_SERIAL_PORT" not in cli.render_plist("/usr/bin/python3", "/tmp/wd")
+
+
+def test_render_plist_escapes_the_port():
+    out = cli.render_plist("/usr/bin/python3", "/tmp/wd", "/dev/a&b<c")
+    assert "/dev/a&amp;b&lt;c" in out
+
+
+def test_run_passes_the_pinned_port_to_the_daemon(monkeypatch):
+    seen = []
+    monkeypatch.setattr(cli.daemon_mod, "main", lambda serial, port=None: seen.append(port))
+    cli.cmd_run(argparse.Namespace(serial=None, port="/dev/cu.usbmodem1101"))
+    assert seen == ["/dev/cu.usbmodem1101"]
+

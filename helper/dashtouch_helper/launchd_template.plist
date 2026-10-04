@@ -16,6 +16,6 @@
   <key>StandardOutPath</key><string>{logdir}/helper.log</string>
   <key>StandardErrorPath</key><string>{logdir}/helper.err</string>
   <key>EnvironmentVariables</key>
-  <dict><key>PYTHONUNBUFFERED</key><string>1</string></dict>
+  <dict><key>PYTHONUNBUFFERED</key><string>1</string>{extra_env}</dict>
 </dict>
 </plist>
