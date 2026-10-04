@@ -95,6 +95,12 @@ The name can change if you move the board to another USB port, in which case
 run `install-agent --port` again with the new one. If you actually run two
 Dashboard Touch boards, pass `.venv/bin/dashtouch --serial <which>`.
 
+`./setup` and `dashtouch pairing` only choose which board to flash: they ask
+when there's more than one, and `--port` skips the question. They don't tell
+the running helper which board to use — that's `run --port` / `install-agent
+--port` above. The [README](../README.md#if-you-have-other-usb-serial-devices)
+has the same steps in order.
+
 ## Still stuck?
 
 `firmware/diagnostics/` is a whole toolbox of tiny test programs with

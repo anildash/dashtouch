@@ -140,6 +140,10 @@ do all of your key tasks:
 .venv/bin/dashtouch install-agent   # configure the helper to run in the background automatically
 ```
 
+Both `run` and `install-agent` take an optional `--port` (see
+[If you have other USB serial devices](#if-you-have-other-usb-serial-devices)
+below), and so do `./setup` and `dashtouch pairing`.
+
 ### macOS will ask you about a keyboard
 
 The first time you plug the board in after it's wired up and flashed, macOS will
@@ -163,6 +167,30 @@ enable the Dashboard Touch system to do its tasks, but it also provides a
 convenient user interface for you to configure or customize your setup right
 from your web browser. The helper's page lives at IP address 127.0.0.1, and the
 port number is 3274. (That's DASH on a phone keypad.)
+
+### If you have other USB serial devices
+
+By default the helper finds your board on its own, but it can only do that when
+exactly one USB serial device (`/dev/cu.usbmodem...`) is plugged in. If you have
+others, the helper will say "More than one board is plugged in" and wait. Tell it
+which one is Dashboard Touch with `--port`:
+
+```sh
+ls /dev/cu.usbmodem*            # list the devices that are plugged in
+.venv/bin/dashtouch run --port /dev/cu.usbmodem1101
+.venv/bin/dashtouch install-agent --port /dev/cu.usbmodem1101   # for the background helper
+```
+
+Not sure which one is yours? Unplug the board, run `ls` again, and the one that
+disappeared is it. The name can change if you move the board to a different USB
+port, so if the helper stops finding it, find the new name and run the command
+again.
+
+`./setup` and `dashtouch pairing` handle this a little differently: they ask
+which board should get the firmware when there's more than one. Add
+`--port /dev/cu.usbmodem1101` to either one to skip the question. (Those two
+only choose the board to flash. `run` and `install-agent` are what tell the
+helper which board to talk to afterward.)
 
 ### Manually updating firmware
 
