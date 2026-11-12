@@ -79,6 +79,24 @@ step the first time, or flash by hand with the commands it prints.
 - Same finger both times — the sensor compares the two presses.
 - Wet, dusty, or freshly-lotioned fingers read poorly.
 
+## Installation & Environment
+
+### `bad interpreter: ... no such file or directory`
+
+If running `.venv/bin/dashtouch` fails with:
+
+```text
+zsh: .venv/bin/dashtouch: bad interpreter: /path/to/.venv/bin/python3.14: no such file or directory
+```
+
+Your system Python was likely upgraded (for example, via Homebrew), removing the older Python binary that `.venv` linked to. Recreate the virtual environment with your current Python version:
+
+```bash
+rm -rf .venv
+python3 -m venv .venv
+.venv/bin/pip install -e .
+```
+
 ## "More than one board is plugged in"
 
 Other USB serial devices (`/dev/cu.usbmodem*`) make the helper unsure which
